@@ -35,6 +35,7 @@ impl OutputBitStream {
     pub fn new() -> Self {
         OutputBitStream {
             buffer: Vec::new(),
+
             pos: 8, // cuz buff.len == 0
         }
     }
@@ -111,7 +112,7 @@ impl InputBitStream {
         }
         let curr_byte = *self.buffer.get(self.index).ok_or(Error::EOF)?;
         self.pos += 1;
-        if curr_byte >> self.pos - 1 & 1 == 0 {
+        if curr_byte >> 8 - self.pos & 1 == 0 {
             Ok(Bit::Zero)
         } else {
             Ok(Bit::One)
@@ -181,12 +182,6 @@ mod tests {
         assert_eq!(b.buffer.len(), 2);
         assert_eq!(b.buffer[0], 0b0101_0101);
         assert_eq!(b.buffer[1], 0b1000_0000);
-
-        let mut r = InputBitStream::new(b.close());
-        let byte = r.read_byte().unwrap();
-        println!("{:b}", byte);
-        let byte = r.read_byte().unwrap();
-        println!("{:b}", byte);
     }
 
     #[test]
@@ -245,19 +240,10 @@ mod tests {
     fn write_read() {
         let mut b = OutputBitStream::new();
         b.write_bits(1.0_f64.to_bits(), 64);
-        println!("len: {}", b.buffer.len());
-        println!("{:08b}", b.buffer[0]);
-        println!("{:08b}", b.buffer[1]);
-        println!("{:08b}", b.buffer[2]);
-        println!("{:08b}", b.buffer[3]);
-        println!("{:08b}", b.buffer[4]);
-        println!("{:08b}", b.buffer[5]);
-        println!("{:08b}", b.buffer[6]);
-        println!("{:08b}", b.buffer[7]);
-
-        println!("{:064b}", 1.0_f64.to_bits());
+        b.write_bits(0b1011, 4);
 
         let mut r = InputBitStream::new(b.close());
         assert_eq!(r.read_bits(64).unwrap(), 1.0_f64.to_bits());
+        assert_eq!(r.read_bits(4).unwrap(), 0b1011);
     }
 }
