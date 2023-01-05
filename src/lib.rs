@@ -1,4 +1,5 @@
 pub mod bitstream;
+pub mod chimp;
 pub mod gorilla;
 
 #[derive(PartialEq, PartialOrd)]

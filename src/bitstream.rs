@@ -234,6 +234,10 @@ mod tests {
         assert_eq!(b.buffer[2], 0b0000_1100);
         assert_eq!(b.buffer[3], 0b1100_0101);
         assert_eq!(b.pos, 8);
+
+        // 10110
+        b.write_bits(0b1001_0110, 5);
+        assert_eq!(b.buffer[4], 0b1011_0000);
     }
 
     #[test]

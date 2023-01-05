@@ -92,22 +92,13 @@ impl Decoder {
         }
     }
 
-    pub fn get_next(&mut self) -> Result<u64, Error> {
-        if self.done {
-            return Err(Error::EOF);
-        }
+    fn get_first(&mut self) -> Result<u64, Error> {
+        self.curr = self.read.read_bits(64)?;
+        Ok(self.curr)
+    }
 
-        if self.first {
-            self.first = false;
-            self.curr = self.read.read_bits(64)?;
-            if self.curr == NAN {
-                self.done = true;
-            }
-            return Ok(self.curr);
-        }
-
+    fn get_value(&mut self) -> Result<u64, Error> {
         let mut bit = self.read.read_bit()?;
-
         if bit == Bit::One {
             bit = self.read.read_bit()?;
             if bit == Bit::One {
@@ -119,12 +110,28 @@ impl Decoder {
             let center_bits = 64 - self.leading_zeros - self.trailing_zeros;
             let xor = self.read.read_bits(center_bits)?;
             self.curr ^= xor << self.trailing_zeros;
-
-            if self.curr == NAN {
-                self.done = true;
-            }
         }
         return Ok(self.curr);
+    }
+
+    pub fn next(&mut self) -> Result<u64, Error> {
+        if self.done {
+            return Err(Error::EOF);
+        }
+
+        let res: u64;
+        if self.first {
+            self.first = false;
+            res = self.get_first()?;
+        } else {
+            res = self.get_value()?;
+        }
+
+        if res == NAN {
+            Err(Error::EOF)
+        } else {
+            Ok(res)
+        }
     }
 }
 
@@ -134,13 +141,13 @@ mod tests {
     use crate::bitstream::InputBitStream;
 
     #[test]
-    fn test() {
+    fn simple_test() {
         let float_vec: Vec<f64> = [1.0, 16.42, 1.0, 0.00123, 24435_f64, 0_f64, 420.69].to_vec();
 
         let mut encoder = Encoder::new();
 
-        for val in float_vec {
-            encoder.insert_value(val);
+        for val in &float_vec {
+            encoder.insert_value(*val);
         }
 
         let bytes = encoder.close();
@@ -148,20 +155,16 @@ mod tests {
         let mut datapoints = Vec::new();
 
         loop {
-            match decoder.get_next() {
+            match decoder.next() {
                 Ok(val) => {
-                    datapoints.push(val);
+                    datapoints.push(f64::from_bits(val));
                 }
                 Err(_) => {
-                    println!("encountered problem");
                     break;
                 }
             };
         }
-        println!("size: {}", datapoints.len());
-        for val in datapoints {
-            println!("{}", f64::from_bits(val));
-            println!("as bits {:064b}", val);
-        }
+
+        assert_eq!(datapoints, float_vec);
     }
 }
