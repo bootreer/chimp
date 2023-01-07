@@ -1,7 +1,5 @@
 use crate::bitstream::{Error, InputBitStream, OutputBitStream};
-use crate::Bit;
-
-const NAN: u64 = 0b0111111111111000000000000000000000000000000000000000000000000000;
+use crate::{Bit, NAN};
 
 #[derive(Debug)]
 pub struct Encoder {

@@ -2,6 +2,8 @@ pub mod bitstream;
 pub mod chimp;
 pub mod gorilla;
 
+static NAN: u64 = 0b0111111111111000000000000000000000000000000000000000000000000000;
+
 #[derive(PartialEq, PartialOrd)]
 pub enum Bit {
     Zero,
