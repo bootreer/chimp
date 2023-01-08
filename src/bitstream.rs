@@ -10,7 +10,7 @@ pub enum Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             Error::EOF => write!(f, "Encountered the end of the stream"),
         }
@@ -25,7 +25,7 @@ impl error::Error for Error {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OutputBitStream {
     buffer: Vec<u8>, // maybe store as string?
     pos: u8,         // position in curr byte
@@ -35,7 +35,6 @@ impl OutputBitStream {
     pub fn new() -> Self {
         OutputBitStream {
             buffer: Vec::new(),
-
             pos: 8, // cuz buff.len == 0
         }
     }
@@ -78,12 +77,14 @@ impl OutputBitStream {
 
     pub fn write_bits(&mut self, bits: u64, mut len: u32) {
         while len >= 8 {
-            self.write_byte((bits >> len - 8) as u8);
+            let to_write = bits >> (len - 8);
+            self.write_byte(to_write as u8);
             len -= 8;
         }
 
         while len > 0 {
-            self.write_bit((bits >> len - 1) as u8);
+            let to_write = bits >> (len - 1);
+            self.write_bit(to_write as u8);
             len -= 1;
         }
     }
@@ -112,7 +113,8 @@ impl InputBitStream {
         }
         let curr_byte = *self.buffer.get(self.index).ok_or(Error::EOF)?;
         self.pos += 1;
-        if curr_byte >> 8 - self.pos & 1 == 0 {
+
+        if (curr_byte >> (8 - self.pos)) & 1 == 0 {
             Ok(Bit::Zero)
         } else {
             Ok(Bit::One)
@@ -122,11 +124,11 @@ impl InputBitStream {
     fn read_byte(&mut self) -> Result<u8, Error> {
         if self.pos == 8 {
             self.index += 1;
-            return self.buffer.get(self.index).cloned().ok_or(Error::EOF);
+            return self.buffer.get(self.index).copied().ok_or(Error::EOF);
         }
         if self.pos == 0 {
             self.pos += 8;
-            return self.buffer.get(self.index).cloned().ok_or(Error::EOF);
+            return self.buffer.get(self.index).copied().ok_or(Error::EOF);
         }
 
         let mut byte: u8 = 0;
@@ -135,7 +137,7 @@ impl InputBitStream {
         byte |= curr_byte.wrapping_shl(self.pos as u32);
 
         self.index += 1;
-        curr_byte = *self.buffer.get(self.index).ok_or(Error::EOF)? >> 8 - self.pos; // schmexy
+        curr_byte = *self.buffer.get(self.index).ok_or(Error::EOF)? >> (8 - self.pos); // schmexy
 
         byte |= curr_byte;
 
