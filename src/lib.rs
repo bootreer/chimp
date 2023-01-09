@@ -73,6 +73,7 @@ impl Encoder {
 
         if xor == 0 {
             self.w.write_bits(0, 2);
+            self.leading_zeros = 65;
             return;
         }
 
@@ -87,6 +88,7 @@ impl Encoder {
             let center_bits = 64 - lead - trail;
             self.w.write_bits(center_bits as u64, 6);
             self.w.write_bits(xor >> trail, center_bits);
+            self.leading_zeros = 65;
 
             self.size += 9 + center_bits;
         } else {
@@ -157,12 +159,10 @@ impl Decoder {
     }
 
     fn get_value(&mut self) -> Result<(), Error> {
-        dbg!(f64::from_bits(self.curr));
         let mut center_bits: u32;
         let xor: u64;
         match self.r.read_bits(2)? {
             1 => {
-                dbg!(1);
                 self.leading_zeros = LEADING_REPR_DEC[self.r.read_bits(3)? as usize];
                 center_bits = self.r.read_bits(6)? as u32;
                 if center_bits == 0 {
@@ -173,13 +173,11 @@ impl Decoder {
                 self.curr ^= xor << self.trailing_zeros;
             }
             2 => {
-                dbg!(2);
                 center_bits = 64 - self.leading_zeros;
                 xor = self.r.read_bits(center_bits)?;
                 self.curr ^= xor;
             }
             3 => {
-                dbg!(3);
                 self.leading_zeros = LEADING_REPR_DEC[self.r.read_bits(3)? as usize];
                 center_bits = 64 - self.leading_zeros;
                 xor = self.r.read_bits(center_bits)?;
@@ -230,6 +228,7 @@ mod chimp_tests {
         let mut encoder = Encoder::new();
 
         for val in &float_vec {
+            println!("encoding: {val}");
             encoder.encode(*val);
         }
 
