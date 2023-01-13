@@ -76,7 +76,6 @@ impl Encode for Encoder {
 
     fn close(&mut self) -> Box<[u8]> {
         self.insert_value(f64::NAN);
-        self.write.write_bit(0);
         self.write.clone().close()
     }
 }

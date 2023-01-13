@@ -1,7 +1,9 @@
 #![warn(rust_2018_idioms, rust_2021_compatibility, nonstandard_style)]
+#![allow(dead_code)]
 
 use crate::bitstream::{Error, InputBitStream, OutputBitStream};
 pub mod bitstream;
+pub mod chimpn;
 pub mod gorilla;
 
 const NAN: u64 = 0b0111111111111000000000000000000000000000000000000000000000000000;
@@ -81,8 +83,7 @@ impl Encoder {
         let trail = xor.trailing_zeros();
 
         if trail > 6 {
-            self.w.write_bit(0);
-            self.w.write_bit(1);
+            self.w.write_bits(1, 2);
 
             self.w.write_bits(LEADING_REPR_ENC[lead as usize] as u64, 3);
             let center_bits = 64 - lead - trail;
@@ -126,7 +127,6 @@ impl Encode for Encoder {
 
     fn close(&mut self) -> Box<[u8]> {
         self.insert_value(f64::NAN);
-        self.w.write_bit(0);
         self.w.clone().close() // TODO: wtf
     }
 }

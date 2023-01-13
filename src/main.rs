@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let new_now = Instant::now();
     println!(
         "[chimp] avg bits per val: {}",
-        *&chimp.size as f64 / values.len() as f64
+        chimp.size as f64 / values.len() as f64
     );
 
     println!(
@@ -40,12 +40,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut chimp_vec: Vec<f64> = Vec::new();
 
     let now = Instant::now();
-    loop {
-        match chimp.get_next() {
-            Ok(val) => chimp_vec.push(f64::from_bits(val)),
-            _ => break,
-        }
+    while let Ok(val) = chimp.get_next() {
+        chimp_vec.push(f64::from_bits(val));
     }
+
     let new_now = Instant::now();
     println!(
         "time required to decode {} values: {:?}",
