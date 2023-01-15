@@ -6,7 +6,7 @@ use crate::{Error, InputBitStream, OutputBitStream};
 const THRESHOLD: usize = 13;
 const SET_LSB: usize = 0x3FFF;
 
-struct Encoder {
+pub struct Encoder {
     first: bool,
     stored_vals: Vec<u64>,
     indices: Vec<usize>,
@@ -16,7 +16,7 @@ struct Encoder {
     index: usize, // always points to previous index
     w: OutputBitStream,
 
-    size: u64, // for testing
+    pub size: u64, // for testing
 }
 
 impl Encoder {
@@ -38,6 +38,8 @@ impl Encoder {
         self.indices[value.to_bits() as usize & SET_LSB] = self.index;
 
         self.w.write_bits(value.to_bits(), 64);
+
+        self.size += 64;
     }
 
     fn insert_value(&mut self, value: f64) {
@@ -58,11 +60,11 @@ impl Encoder {
             } else {
                 // previous value
                 prev_index = self.index % 128;
-                xor = self.stored_vals[self.index] ^ value.to_bits();
+                xor = self.stored_vals[self.curr_idx] ^ value.to_bits();
             }
         } else {
             prev_index = self.index % 128;
-            xor = self.stored_vals[self.index] ^ value.to_bits();
+            xor = self.stored_vals[self.curr_idx] ^ value.to_bits();
         }
 
         // identical value
@@ -70,6 +72,8 @@ impl Encoder {
         if xor == 0 {
             self.w.write_bits(prev_index as u64, 9); // 'flagZeroSize' = log_2(ring_buffer_size) + 2
             self.leading_zeros = 65;
+
+            self.size += 9;
         } else {
             let lead = LEADING_ROUND[xor.leading_zeros() as usize];
 
@@ -85,6 +89,8 @@ impl Encoder {
                 self.w.write_bits(xor >> trail, center_bits as u32);
 
                 self.leading_zeros = 65;
+
+                self.size += 18 + center_bits;
             } else {
                 let center_bits = 64 - lead;
 
@@ -98,6 +104,8 @@ impl Encoder {
                 }
 
                 self.w.write_bits(xor, center_bits);
+
+                self.size += 3 + center_bits as u64;
             }
         }
 
@@ -127,7 +135,7 @@ impl Encode for Encoder {
     }
 }
 
-struct Decoder {
+pub struct Decoder {
     first: bool,
     done: bool,
 
@@ -143,6 +151,7 @@ struct Decoder {
 // prev_values_log = 7
 // initial_fill = 7 + 9 = 16
 
+// TODO: enc/dec isn't entirely correct
 impl Decoder {
     pub fn new(r: InputBitStream) -> Self {
         Decoder {
