@@ -8,7 +8,7 @@ pub struct Encoder {
     leading_zeros: u32,
     trailing_zeros: u32,
     write: OutputBitStream,
-    pub size: u32,
+    pub size: u64,
 }
 
 // quick and dirty hack
@@ -49,7 +49,7 @@ impl Encoder {
 
                     self.write
                         .write_bits(xor >> self.trailing_zeros, center_bits);
-                    self.size += center_bits;
+                    self.size += center_bits as u64;
                 } else {
                     self.write.write_bit(1);
                     self.write.write_bits(lead as u64, 6);
@@ -60,7 +60,7 @@ impl Encoder {
                     self.leading_zeros = lead;
                     self.trailing_zeros = trail;
 
-                    self.size += 12 + center_bits;
+                    self.size += 12 + center_bits as u64;
                 }
             }
         }
@@ -74,9 +74,9 @@ impl Encode for Encoder {
         self.insert_value(value);
     }
 
-    fn close(&mut self) -> Box<[u8]> {
+    fn close(&mut self) -> (Box<[u8]>, u64) {
         self.insert_value(f64::NAN);
-        self.write.clone().close()
+        (self.write.clone().close(), self.size)
     }
 }
 
@@ -165,19 +165,12 @@ mod tests {
             encoder.insert_value(*val);
         }
 
-        let bytes = encoder.close();
+        let (bytes, _) = encoder.close();
         let mut decoder = Decoder::new(InputBitStream::new(bytes));
         let mut datapoints = Vec::new();
 
-        loop {
-            match decoder.get_next() {
-                Ok(val) => {
-                    datapoints.push(f64::from_bits(val));
-                }
-                Err(_) => {
-                    break;
-                }
-            };
+        while let Ok(val) = decoder.get_next() {
+            datapoints.push(f64::from_bits(val));
         }
 
         assert_eq!(datapoints, float_vec);

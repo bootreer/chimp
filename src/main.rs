@@ -36,7 +36,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         (new_now - now) / (values.len() / 1000) as u32
     );
 
-    let mut chimp = chimp::Decoder::new(InputBitStream::new(chimp.close()));
+    let (bytes, _size) = chimp.close();
+    let mut chimp = chimp::Decoder::new(InputBitStream::new(bytes));
     let mut chimp_vec: Vec<f64> = Vec::new();
 
     let now = Instant::now();

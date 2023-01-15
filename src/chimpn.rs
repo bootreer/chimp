@@ -1,5 +1,5 @@
-use crate::OutputBitStream;
-use crate::{Encode, LEADING_REPR_ENC, LEADING_ROUND};
+use crate::{Encode, LEADING_REPR_DEC, LEADING_REPR_ENC, LEADING_ROUND, NAN};
+use crate::{Error, InputBitStream, OutputBitStream};
 
 // Chimp N (= 128)
 
@@ -23,8 +23,8 @@ impl Encoder {
     pub fn new() -> Self {
         Encoder {
             first: true,
-            stored_vals: Vec::with_capacity(128),
-            indices: Vec::with_capacity(2_usize.pow(14)),
+            stored_vals: vec![0; 128],
+            indices: vec![0; 2_usize.pow(14)],
             leading_zeros: 0,
             curr_idx: 0,
             index: 0,
@@ -66,18 +66,20 @@ impl Encoder {
         }
 
         // identical value
+        // flag: 00
         if xor == 0 {
             self.w.write_bits(prev_index as u64, 9); // 'flagZeroSize' = log_2(ring_buffer_size) + 2
             self.leading_zeros = 65;
         } else {
             let lead = LEADING_ROUND[xor.leading_zeros() as usize];
 
+            // flag: 01
             if trail > THRESHOLD as u32 {
                 let center_bits = u64::from(64 - lead - trail);
 
-                let tmp = 512 * (128 + prev_index as u64)
-                    + (64 * LEADING_REPR_ENC[lead as usize] as u64)
-                    + center_bits;
+                let tmp = (128 + prev_index as u64) << 9
+                    | (LEADING_REPR_ENC[lead as usize] as u64) << 6
+                    | center_bits;
 
                 self.w.write_bits(tmp, 18); // flagOneSize = log_2(ring_buffer_size) + 11
                 self.w.write_bits(xor >> trail, center_bits as u32);
@@ -88,10 +90,11 @@ impl Encoder {
 
                 if lead != self.leading_zeros {
                     self.leading_zeros = lead;
-                    self.w
-                        .write_bits(24 + LEADING_REPR_ENC[lead as usize] as u64, 5)
+
+                    self.w.write_bits(3, 2); // flag: 11
+                    self.w.write_bits(LEADING_REPR_ENC[lead as usize] as u64, 3)
                 } else {
-                    self.w.write_bits(2, 2);
+                    self.w.write_bits(2, 2); // flag: 10
                 }
 
                 self.w.write_bits(xor, center_bits);
@@ -118,8 +121,144 @@ impl Encode for Encoder {
         }
     }
 
-    fn close(&mut self) -> Box<[u8]> {
+    fn close(&mut self) -> (Box<[u8]>, u64) {
         self.insert_value(f64::NAN);
-        self.w.clone().close() // TODO: wtf
+        (self.w.clone().close(), self.size) // TODO: wtf
+    }
+}
+
+struct Decoder {
+    first: bool,
+    done: bool,
+
+    stored_vals: Vec<u64>,
+    curr: u64, // curr stored value
+    curr_idx: usize,
+    leading_zeros: u32,
+    trailing_zeros: u32,
+    r: InputBitStream,
+}
+
+// prev_values = 128
+// prev_values_log = 7
+// initial_fill = 7 + 9 = 16
+
+impl Decoder {
+    pub fn new(r: InputBitStream) -> Self {
+        Decoder {
+            first: true,
+            done: false,
+            stored_vals: (0..128).collect(),
+            curr: 0,
+            curr_idx: 0,
+            leading_zeros: u32::MAX,
+            trailing_zeros: 0,
+            r,
+        }
+    }
+
+    fn get_first(&mut self) -> Result<(), Error> {
+        self.curr = self.r.read_bits(64)?;
+        self.stored_vals[self.curr_idx] = self.curr;
+        Ok(())
+    }
+
+    fn get_value(&mut self) -> Result<(), Error> {
+        let xor: u64;
+
+        match self.r.read_bits(2)? {
+            1 => {
+                // prev_values = 128
+                // prev_values_log = 7
+                // initial_fill = 7 + 9 = 16
+                let mut tmp = self.r.read_bits(16)?;
+                let mut center_bits = tmp & 0x3F;
+                tmp >>= 6;
+
+                self.leading_zeros = LEADING_REPR_DEC[(tmp & 7) as usize];
+                tmp >>= 3;
+
+                let index = tmp & ((1 << 7) - 1);
+                self.curr = self.stored_vals[index as usize];
+
+                if center_bits == 0 {
+                    center_bits = 64;
+                }
+
+                self.trailing_zeros = 64 - center_bits as u32 - self.leading_zeros;
+                xor = self.r.read_bits(center_bits as u32)?;
+                self.curr ^= xor << self.trailing_zeros;
+            }
+            2 => {
+                xor = self.r.read_bits(64 - self.leading_zeros)?;
+                self.curr ^= xor;
+            }
+            3 => {
+                self.leading_zeros = LEADING_REPR_DEC[self.r.read_bits(3)? as usize];
+                xor = self.r.read_bits(64 - self.leading_zeros)?;
+                self.curr ^= xor;
+            }
+            _ => {
+                let index = self.r.read_bits(7)? as usize;
+                self.curr = self.stored_vals[index];
+            }
+        }
+
+        self.curr_idx += 1;
+        self.curr_idx %= 128;
+        self.stored_vals[self.curr_idx] = self.curr;
+
+        Ok(())
+    }
+
+    pub fn get_next(&mut self) -> Result<u64, Error> {
+        if self.done {
+            return Err(Error::EOF);
+        }
+
+        if self.first {
+            self.get_first()?;
+            self.first = false;
+        } else {
+            self.get_value()?;
+        }
+
+        if self.curr == NAN {
+            Err(Error::EOF)
+        } else {
+            Ok(self.curr)
+        }
+    }
+}
+
+#[cfg(test)]
+mod chimp_tests {
+    use super::{Decoder, Encoder};
+    use crate::bitstream::InputBitStream;
+    use crate::Encode;
+
+    #[test]
+    fn simple_test() {
+        let float_vec: Vec<f64> = [
+            1.0, 1.0, 16.42, 1.0, 0.00123, 24435_f64, 0_f64, 420.69, 64.2, 49.4, 48.8, 46.4, 64.2,
+            49.4, 48.8, 46.4, 47.9, 48.7, 48.9, 48.8, 46.4, 47.9, 48.7, 48.9,
+        ]
+        .to_vec();
+
+        let mut encoder = Encoder::new();
+
+        for val in &float_vec {
+            encoder.encode(*val);
+        }
+
+        let (bytes, _) = encoder.close();
+        let mut decoder = Decoder::new(InputBitStream::new(bytes));
+        let mut datapoints = Vec::new();
+
+        while let Ok(val) = decoder.get_next() {
+            datapoints.push(f64::from_bits(val));
+        }
+
+        assert_eq!(datapoints, float_vec);
     }
 }

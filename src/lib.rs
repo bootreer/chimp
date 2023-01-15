@@ -25,7 +25,7 @@ impl Bit {
 
 pub trait Encode {
     fn encode(&mut self, value: f64);
-    fn close(&mut self) -> Box<[u8]>;
+    fn close(&mut self) -> (Box<[u8]>, u64);
 }
 
 // TODO: figure out better shit than 3 static arrays lmao
@@ -49,10 +49,9 @@ pub struct Encoder {
     curr: u64, // current float value as bits
     leading_zeros: u32,
     w: OutputBitStream,
-    pub size: u32,
+    pub size: u64,
 }
 
-// TODO: fix some shit yo (enc + dec, case 01)
 impl Encoder {
     pub fn new() -> Self {
         Encoder {
@@ -91,7 +90,7 @@ impl Encoder {
             self.w.write_bits(xor >> trail, center_bits);
             self.leading_zeros = 65;
 
-            self.size += 9 + center_bits;
+            self.size += 9 + center_bits as u64;
         } else {
             self.w.write_bit(1);
             if lead == self.leading_zeros {
@@ -105,7 +104,7 @@ impl Encoder {
             }
             self.w.write_bits(xor, 64 - lead);
 
-            self.size += 64 - lead;
+            self.size += 64 - lead as u64;
         }
         self.curr = value.to_bits();
 
@@ -125,9 +124,9 @@ impl Encode for Encoder {
         }
     }
 
-    fn close(&mut self) -> Box<[u8]> {
+    fn close(&mut self) -> (Box<[u8]>, u64) {
         self.insert_value(f64::NAN);
-        self.w.clone().close() // TODO: wtf
+        (self.w.clone().close(), self.size) // TODO: wtf
     }
 }
 
@@ -228,23 +227,16 @@ mod chimp_tests {
         let mut encoder = Encoder::new();
 
         for val in &float_vec {
-            println!("encoding: {val}");
             encoder.encode(*val);
         }
 
-        let bytes = encoder.close();
+        let (bytes, _) = encoder.close();
         let mut decoder = Decoder::new(InputBitStream::new(bytes));
         let mut datapoints = Vec::new();
 
-        loop {
-            match decoder.get_next() {
-                Ok(val) => {
-                    datapoints.push(f64::from_bits(val));
-                }
-                _ => break,
-            };
+        while let Ok(val) = decoder.get_next() {
+            datapoints.push(f64::from_bits(val));
         }
-        dbg!(&decoder);
 
         assert_eq!(datapoints, float_vec);
     }
