@@ -22,9 +22,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         chimp.encode(*val);
     }
     let new_now = Instant::now();
+    let (bytes, size) = chimp.close();
     println!(
         "[chimp] avg bits per val: {}",
-        chimp.size as f64 / values.len() as f64
+        size as f64 / values.len() as f64
     );
 
     println!(
@@ -37,7 +38,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         (new_now - now) / (values.len() / 1000) as u32
     );
 
-    let (bytes, _size) = chimp.close();
     let mut chimp = chimp::Decoder::new(InputBitStream::new(bytes));
     let mut chimp_vec: Vec<f64> = Vec::new();
 
@@ -65,9 +65,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         chimp.encode(*val);
     }
     let new_now = Instant::now();
+    let (bytes, size) = chimp.close();
     println!(
         "[chimp128] avg bits per val: {}",
-        chimp.size as f64 / values.len() as f64
+        size as f64 / values.len() as f64
     );
 
     println!(
@@ -80,7 +81,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         (new_now - now) / (values.len() / 1000) as u32
     );
 
-    let (bytes, _size) = chimp.close();
     let mut chimp = chimpn::Decoder::new(InputBitStream::new(bytes));
     let mut chimp_vec: Vec<f64> = Vec::new();
 

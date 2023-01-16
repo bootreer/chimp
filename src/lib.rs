@@ -25,7 +25,7 @@ impl Bit {
 
 pub trait Encode {
     fn encode(&mut self, value: f64);
-    fn close(mut self) -> (Box<[u8]>, u64);
+    fn close(&mut self) -> (Box<[u8]>, u64);
 }
 
 // TODO: figure out better shit than 3 static arrays lmao
@@ -49,7 +49,7 @@ pub struct Encoder {
     curr: u64, // current float value as bits
     leading_zeros: u32,
     w: OutputBitStream,
-    pub size: u64,
+    size: u64,
 }
 
 impl Encoder {
@@ -124,10 +124,10 @@ impl Encode for Encoder {
         }
     }
 
-    fn close(mut self) -> (Box<[u8]>, u64) {
+    fn close(&mut self) -> (Box<[u8]>, u64) {
         self.insert_value(f64::NAN);
         self.w.write_bit(0); // not sure why actual implementation does this
-        (self.w.close(), self.size) // TODO: wtf
+        (self.w.clone().close(), self.size) // TODO: wtf
     }
 }
 
