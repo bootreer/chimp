@@ -17,6 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     // CHIMP
     let now = Instant::now();
+
     for val in &values {
         chimp.encode(*val);
     }
@@ -51,6 +52,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         values.len(),
         new_now - now
     );
+    println!(
+        "per 1000 values: {:?}",
+        (new_now - now) / (values.len() / 1000) as u32
+    );
     assert_eq!(&chimp_vec, &values);
 
     // CHIMP 128
@@ -76,7 +81,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
 
     let (bytes, _size) = chimp.close();
-    let mut chimp = chimp::Decoder::new(InputBitStream::new(bytes));
+    let mut chimp = chimpn::Decoder::new(InputBitStream::new(bytes));
     let mut chimp_vec: Vec<f64> = Vec::new();
 
     let now = Instant::now();
@@ -90,6 +95,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         values.len(),
         new_now - now
     );
-    // assert_eq!(&chimp_vec, &values);
+    println!(
+        "per 1000 values: {:?}",
+        (new_now - now) / (values.len() / 1000) as u32
+    );
+    assert_eq!(&chimp_vec, &values);
+
     Ok(())
 }

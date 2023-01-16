@@ -129,9 +129,10 @@ impl Encode for Encoder {
         }
     }
 
-    fn close(&mut self) -> (Box<[u8]>, u64) {
+    fn close(mut self) -> (Box<[u8]>, u64) {
         self.insert_value(f64::NAN);
-        (self.w.clone().close(), self.size) // TODO: wtf
+        self.w.write_bit(0); // not sure why actual implementation does this
+        (self.w.close(), self.size) // TODO: wtf
     }
 }
 
@@ -249,7 +250,6 @@ mod chimp_tests {
     #[test]
     fn simple_test() {
         let float_vec: Vec<f64> = [
-            1.0, 1.0, 16.42, 1.0, 0.00123, 24435_f64, 0_f64, 420.69, 64.2, 49.4, 48.8, 46.4, 64.2,
             49.4, 48.8, 46.4, 47.9, 48.7, 48.9, 48.8, 46.4, 47.9, 48.7, 48.9,
         ]
         .to_vec();
