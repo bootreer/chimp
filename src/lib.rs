@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 use crate::bitstream::{Error, InputBitStream, OutputBitStream};
+pub mod bits_mut;
 pub mod bitstream;
 pub mod chimpn;
 pub mod gorilla;
@@ -24,6 +25,7 @@ impl Bit {
 }
 
 pub trait Encode {
+    fn encode_vec(values: &Vec<f64>) -> Self;
     fn encode(&mut self, value: f64);
     fn close(&mut self) -> (Box<[u8]>, u64);
 }
@@ -115,6 +117,14 @@ impl Encoder {
 }
 
 impl Encode for Encoder {
+    fn encode_vec(values: &Vec<f64>) -> Self {
+        let mut enc = Encoder::new();
+        for &val in values {
+            enc.encode(val);
+        }
+        enc
+    }
+
     fn encode(&mut self, value: f64) {
         if self.first {
             self.first = false;

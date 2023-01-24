@@ -70,6 +70,10 @@ impl Encoder {
 }
 
 impl Encode for Encoder {
+    fn encode_vec(values: &Vec<f64>) -> Self {
+        Encoder::new()
+    }
+
     fn encode(&mut self, value: f64) {
         self.insert_value(value);
     }
