@@ -1,11 +1,16 @@
+// FIX: Reduce boilerplate, this is starting to look too java for me
 #![warn(rust_2018_idioms, rust_2021_compatibility, nonstandard_style)]
-#![allow(dead_code)]
+#![allow(unused_imports, dead_code)]
 
 use crate::bitstream::{Error, InputBitStream, OutputBitStream};
-pub mod bits_mut;
 pub mod bitstream;
 pub mod chimpn;
 pub mod gorilla;
+
+#[cfg(target_arch = "x86")]
+use std::arch::x86::*;
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
 
 const NAN: u64 = 0b0111111111111000000000000000000000000000000000000000000000000000;
 
@@ -38,7 +43,7 @@ const LEADING_REPR_ENC: [u32; 64] = [
 
 const LEADING_REPR_DEC: [u32; 8] = [0, 8, 12, 16, 18, 20, 22, 24];
 
-// rounded values so we on avg use less space while encoding lenght of leading zeros?
+// rounded values so we on avg use less space while encoding length of leading zeros?
 const LEADING_ROUND: [u32; 64] = [
     0, 0, 0, 0, 0, 0, 0, 0, 8, 8, 8, 8, 12, 12, 12, 12, 16, 16, 18, 18, 20, 20, 22, 22, 24, 24, 24,
     24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
@@ -76,7 +81,7 @@ impl Encoder {
 
         if xor == 0 {
             self.w.write_bits(0, 2);
-            self.leading_zeros = 65;
+            self.size += 2;
             return;
         }
 
@@ -92,7 +97,7 @@ impl Encoder {
             self.w.write_bits(xor >> trail, center_bits);
             self.leading_zeros = 65;
 
-            self.size += 9 + center_bits as u64;
+            self.size += 11 + center_bits as u64;
         } else {
             self.w.write_bit(1);
             if lead == self.leading_zeros {
@@ -106,14 +111,20 @@ impl Encoder {
             }
             self.w.write_bits(xor, 64 - lead);
 
-            self.size += 64 - lead as u64;
+            self.size += 66 - lead as u64;
         }
         self.curr = value.to_bits();
-
-        self.size += 2;
     }
 
-    // TODO: timestamps?
+    // TODO(): impl this
+    #[cfg(all(
+        any(target_arch = "x86", target_arch = "x86_64"),
+    ))]
+    #[target_feature(enable = "avx2")]
+    #[allow(unused_variables)]
+    unsafe fn simd_vec(&mut self, values: &Vec<f64>) {}
+
+    // NOTE: timestamps?
 }
 
 impl Encode for Encoder {
@@ -137,7 +148,7 @@ impl Encode for Encoder {
     fn close(&mut self) -> (Box<[u8]>, u64) {
         self.insert_value(f64::NAN);
         self.w.write_bit(0); // not sure why actual implementation does this
-        (self.w.clone().close(), self.size) // TODO: wtf
+        (self.w.clone().close(), self.size) // HACK: wtf
     }
 }
 
@@ -220,6 +231,31 @@ impl Decoder {
     }
 }
 
+// HACK: for the function signature in main
+impl Iterator for Decoder {
+    type Item = u64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        if self.first {
+            self.first = false;
+            Some(self.get_first().unwrap());
+        } else {
+            Some(self.get_value().unwrap());
+        }
+
+        if self.curr == NAN {
+            self.done = true;
+            None
+        } else {
+            Some(self.curr)
+        }
+    }
+}
+
 #[cfg(test)]
 mod chimp_tests {
     use super::{Decoder, Encoder};
@@ -229,9 +265,8 @@ mod chimp_tests {
     #[test]
     fn simple_test() {
         let float_vec: Vec<f64> = [
-            // 1.0, 1.0, 16.42, 1.0, 0.00123, 24435_f64, 0_f64, 420.69, 64.2, 49.4, 48.8, 46.4,
-            // 64.2, 49.4, 48.8, 46.4, 47.9, 48.7, 48.9,
-            48.8, 46.4, 47.9, 48.7, 48.9,
+            1.0, 1.0, 16.42, 1.0, 0.00123, 24435_f64, 0_f64, 420.69, 64.2, 49.4, 48.8, 46.4, 64.2,
+            49.4, 48.8, 46.4, 47.9, 48.7, 48.9, 48.8, 46.4, 47.9, 48.7, 48.9,
         ]
         .to_vec();
 

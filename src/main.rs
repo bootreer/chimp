@@ -1,30 +1,42 @@
 use chimp::{bitstream::InputBitStream, chimpn, Encode};
-use std::error::Error;
 use std::time::Instant;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // simple benchmark/test with city_temperature dataset
+#[derive(Debug)]
+pub enum ChimpType {
+    Chimp,
+    ChimpN,
+}
+
+// simple benchmark/test/comparison with city_temperature dataset
+fn main() {
     let reader = csv::Reader::from_path("datasets/city_temperature.csv");
 
     let mut values: Vec<f64> = Vec::new();
-    let mut chimp = chimp::Encoder::new();
 
-    for record in reader?.records() {
-        let string_record = record?;
+    for record in reader.unwrap().records() {
+        let string_record = record.unwrap();
         let val = string_record[7].to_string();
-        let val = val.parse::<f64>()?;
+        let val = val.parse::<f64>().unwrap();
         values.push(val);
     }
-    // CHIMP
-    let now = Instant::now();
 
-    for val in &values {
-        chimp.encode(*val);
+    encode(chimp::Encoder::new(), &values, ChimpType::Chimp);
+    println!("----------------------------------------------------");
+    encode(chimpn::Encoder::new(), &values, ChimpType::ChimpN);
+    println!("----------------------------------------------------");
+}
+
+// i've won but at what cost
+pub fn encode(mut enc: impl Encode, values: &Vec<f64>, enc_t: ChimpType) {
+    let now = Instant::now();
+    for val in values {
+        enc.encode(*val);
     }
     let new_now = Instant::now();
-    let (bytes, size) = chimp.close();
+    let (bytes, size) = enc.close();
     println!(
-        "[chimp] avg bits per val: {}",
+        "[{:?}], avg bits per val: {}",
+        enc_t,
         size as f64 / values.len() as f64
     );
 
@@ -38,12 +50,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         (new_now - now) / (values.len() / 1000) as u32
     );
 
-    let mut chimp = chimp::Decoder::new(InputBitStream::new(bytes));
-    let mut chimp_vec: Vec<f64> = Vec::new();
+    let bitstream = InputBitStream::new(bytes);
+    match enc_t {
+        ChimpType::Chimp => decode(chimp::Decoder::new(bitstream), values),
+        ChimpType::ChimpN => decode(chimpn::Decoder::new(bitstream), values),
+    };
+}
+
+pub fn decode(mut dec: impl Iterator<Item = u64>, values: &Vec<f64>) {
+    let mut vec: Vec<f64> = Vec::new();
 
     let now = Instant::now();
-    while let Ok(val) = chimp.get_next() {
-        chimp_vec.push(f64::from_bits(val));
+    while let Some(val) = dec.next() {
+        vec.push(f64::from_bits(val));
     }
 
     let new_now = Instant::now();
@@ -56,50 +75,5 @@ fn main() -> Result<(), Box<dyn Error>> {
         "per 1000 values: {:?}",
         (new_now - now) / (values.len() / 1000) as u32
     );
-    assert_eq!(&chimp_vec, &values);
-
-    // CHIMP 128
-    let mut chimp = chimpn::Encoder::new();
-    let now = Instant::now();
-    for val in &values {
-        chimp.encode(*val);
-    }
-    let new_now = Instant::now();
-    let (bytes, size) = chimp.close();
-    println!(
-        "[chimp128] avg bits per val: {}",
-        size as f64 / values.len() as f64
-    );
-
-    println!(
-        "time required to encode {} values: {:?}",
-        values.len(),
-        new_now - now
-    );
-    println!(
-        "per 1000 values: {:?}",
-        (new_now - now) / (values.len() / 1000) as u32
-    );
-
-    let mut chimp = chimpn::Decoder::new(InputBitStream::new(bytes));
-    let mut chimp_vec: Vec<f64> = Vec::new();
-
-    let now = Instant::now();
-    while let Ok(val) = chimp.get_next() {
-        chimp_vec.push(f64::from_bits(val));
-    }
-
-    let new_now = Instant::now();
-    println!(
-        "time required to decode {} values: {:?}",
-        values.len(),
-        new_now - now
-    );
-    println!(
-        "per 1000 values: {:?}",
-        (new_now - now) / (values.len() / 1000) as u32
-    );
-    assert_eq!(&chimp_vec, &values);
-
-    Ok(())
+    assert_eq!(&vec, values);
 }

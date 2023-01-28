@@ -2,7 +2,6 @@ use crate::{Encode, LEADING_REPR_DEC, LEADING_REPR_ENC, LEADING_ROUND, NAN};
 use crate::{Error, InputBitStream, OutputBitStream};
 
 // Chimp N (= 128)
-
 const THRESHOLD: usize = 13;
 const SET_LSB: usize = 0x3FFF;
 
@@ -121,8 +120,13 @@ impl Encoder {
 
 impl Encode for Encoder {
     fn encode_vec(values: &Vec<f64>) -> Self {
-        Encoder::new()
+        let mut chimpn = Encoder::new();
+        for &val in values {
+            chimpn.encode(val);
+        }
+        chimpn
     }
+
     fn encode(&mut self, value: f64) {
         if self.first {
             self.first = false;
@@ -155,7 +159,6 @@ pub struct Decoder {
 // prev_values_log = 7
 // initial_fill = 7 + 9 = 16
 
-// TODO: enc/dec isn't entirely correct
 impl Decoder {
     pub fn new(r: InputBitStream) -> Self {
         Decoder {
@@ -240,6 +243,30 @@ impl Decoder {
             Err(Error::EOF)
         } else {
             Ok(self.curr)
+        }
+    }
+}
+
+impl Iterator for Decoder {
+    type Item = u64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        if self.first {
+            self.first = false;
+            Some(self.get_first().unwrap());
+        } else {
+            Some(self.get_value().unwrap());
+        }
+
+        if self.curr == NAN {
+            self.done = true;
+            None
+        } else {
+            Some(self.curr)
         }
     }
 }
