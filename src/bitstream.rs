@@ -29,60 +29,82 @@ impl error::Error for Error {
 pub struct OutputBitStream {
     buffer: Vec<u8>, // maybe store as string?
     pos: u8,         // position in curr byte
+    curr: u8,        // faster than constantly accessing buffer
 }
 
 impl OutputBitStream {
     pub fn new() -> Self {
         OutputBitStream {
             buffer: Vec::new(),
-            pos: 8, // cuz buff.len == 0
+            pos: 0, // cuz buff.len == 0
+            curr: 0,
         }
     }
 
     fn check_grow(&mut self) {
         if self.pos == 8 {
-            self.buffer.push(0); // increase size
+            self.buffer.push(self.curr); // increase size
             self.pos = 0;
+            self.curr = 0
         }
     }
 
     fn grow(&mut self) {
-        self.buffer.push(0);
+        self.buffer.push(self.curr);
+        self.curr = 0;
     }
 
-    pub fn close(self) -> Box<[u8]> {
+    pub fn close(mut self) -> Box<[u8]> {
+        if self.pos != 0 {
+            self.buffer.push(self.curr);
+        }
         self.buffer.into_boxed_slice()
     }
 
     pub fn write_bit(&mut self, bit: u8) {
         self.check_grow();
-        let idx = self.buffer.len() - 1;
-        self.buffer[idx] |= (bit & 1) << (7 - self.pos);
+        self.curr |= (bit & 1) << (7 - self.pos);
         self.pos += 1;
     }
 
     pub fn write_byte(&mut self, byte: u8) {
         if self.pos == 8 {
             self.grow();
-            let idx = self.buffer.len() - 1;
-            self.buffer[idx] = byte;
+            self.buffer.push(byte);
+            self.pos = 0; // otherwise empty curr would be pushed
+
             return;
         }
 
-        let idx = self.buffer.len() - 1;
-        self.buffer[idx] |= byte >> self.pos;
+        self.curr |= byte >> self.pos;
         self.grow();
-        self.buffer[idx + 1] |= byte.wrapping_shl(8 - self.pos as u32);
+        let byte = (byte as u32) << (8 - self.pos as u32);
+        self.curr |= byte as u8;
     }
 
-    pub fn write_bits(&mut self, bits: u64, mut len: u32) {
+    // NOTE: maybe make len u8
+    // len \in [0,64]
+    pub fn write_bits(&mut self, mut bits: u64, mut len: u32) {
         while len >= 8 {
-            let to_write = bits >> (len - 8);
-            self.write_byte(to_write as u8);
             len -= 8;
+            let to_write = bits >> len;
+            self.write_byte(to_write as u8);
         }
 
-        while len > 0 {
+        if len == 0 {
+            return;
+        }
+
+        // TODO: maybe fit what can be fit and recursive call?
+        // if we can fit all in one go
+        if 8 - self.pos >= len as u8 {
+            bits = bits << (8 - len - self.pos as u32);
+            self.curr |= bits as u8;
+            self.pos += len as u8;
+            return;
+        }
+
+        for _ in 0..len {
             let to_write = bits >> (len - 1);
             self.write_bit(to_write as u8);
             len -= 1;
@@ -150,7 +172,6 @@ impl InputBitStream {
         }
 
         let mut bits: u64 = 0;
-
         while len >= 8 {
             let byte = self.read_byte()? as u64;
             len -= 8;
@@ -181,6 +202,7 @@ mod tests {
         }
 
         b.write_bit(1);
+        b.grow();
         assert_eq!(b.buffer.len(), 2);
         assert_eq!(b.buffer[0], 0b0101_0101);
         assert_eq!(b.buffer[1], 0b1000_0000);
@@ -206,6 +228,7 @@ mod tests {
         b.write_byte(0b0000_1111); // --> 1010_0001 ; 111x_xxxx
         b.write_bit(0); // --> 1110_xxxx
         b.write_byte(0b1001_1111); // --> 1110_1001 ; 1111_0000
+        b.grow(); // push curr to buffer
 
         assert_eq!(b.buffer.len(), 7);
         assert_eq!(b.buffer[3], 0b0001_0100);
@@ -220,26 +243,53 @@ mod tests {
 
         // 0001
         b.write_bits(1, 4);
-
         // 0 * 16
         b.write_bits(0, 16);
-
         // 11001
         b.write_bits(25, 5);
-
         // 1000101
         b.write_bits(69, 7);
 
-        assert_eq!(b.buffer.len(), 4);
+        assert_eq!(b.buffer.len(), 3);
         assert_eq!(b.buffer[0], 0b0001_0000);
         assert_eq!(b.buffer[1], 0);
         assert_eq!(b.buffer[2], 0b0000_1100);
-        assert_eq!(b.buffer[3], 0b1100_0101);
+        assert_eq!(b.curr, 0b1100_0101);
         assert_eq!(b.pos, 8);
 
         // 10110
         b.write_bits(0b1001_0110, 5);
-        assert_eq!(b.buffer[4], 0b1011_0000);
+        assert_eq!(b.buffer[3], 0b1100_0101);
+        assert_eq!(b.curr, 0b1011_0000);
+    }
+
+    #[test]
+    fn write_and_close() {
+        let mut b = OutputBitStream::new();
+        for i in 0..8 {
+            b.write_bit(i % 3); // 1001_0010
+        }
+        // 0001
+        b.write_bits(1, 4);
+        // 0 * 16
+        b.write_bits(0, 16);
+        // 11001
+        b.write_bits(25, 5);
+        // 1000101
+        b.write_bits(69, 7);
+
+        b.write_bit(1);
+
+        b.write_byte(0b1000_1110);
+        b.write_byte(0b0100_1001);
+        b.write_byte(0b0000_0110);
+        b.write_bit(1);
+        b.write_bits(0b101, 3);
+        let slice = b.close().into_vec();
+
+        // 1001_0010 | 0001_0000 | 0000_0000 | 0000_1100 | 1100_0101 | 1100_0111 |
+        // 0010_0100 | 1000_011 | 0110_1000
+        assert_eq!(slice.len(), 9);
     }
 
     #[test]
