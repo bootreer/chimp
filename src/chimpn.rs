@@ -1,9 +1,8 @@
-use crate::{Encode, LEADING_REPR_DEC, LEADING_REPR_ENC, LEADING_ROUND, NAN};
-use crate::{Error, InputBitStream, OutputBitStream};
+use crate::*;
 
 // Chimp N (= 128)
-const THRESHOLD: usize = 13;
-const SET_LSB: usize = 0x3FFF;
+pub const THRESHOLD: usize = 13;
+pub const LSB_MASK: usize = 0x3FFF;
 
 pub struct Encoder {
     first: bool,
@@ -34,7 +33,7 @@ impl Encoder {
 
     fn insert_first(&mut self, value: f64) {
         self.stored_vals[self.index] = value.to_bits();
-        self.indices[value.to_bits() as usize & SET_LSB] = self.index;
+        self.indices[value.to_bits() as usize & LSB_MASK] = self.index;
 
         self.w.write_bits(value.to_bits(), 64);
 
@@ -42,7 +41,7 @@ impl Encoder {
     }
 
     fn insert_value(&mut self, value: f64) {
-        let lsb_index = self.indices[(value.to_bits() as usize & SET_LSB)];
+        let lsb_index = self.indices[(value.to_bits() as usize & LSB_MASK)];
 
         let prev_index: usize;
         let mut trail: u32 = 0;
@@ -114,13 +113,22 @@ impl Encoder {
         self.stored_vals[self.curr_idx] = value.to_bits();
 
         self.index += 1;
-        self.indices[value.to_bits() as usize & SET_LSB] = self.index;
+        self.indices[value.to_bits() as usize & LSB_MASK] = self.index;
     }
 }
 
 impl Encode for Encoder {
     fn encode_vec(values: &Vec<f64>) -> Self {
-        let mut chimpn = Encoder::new();
+        let mut chimpn = Encoder {
+            first: true,
+            stored_vals: vec![0; 128],
+            indices: vec![0; 2_usize.pow(14)],
+            leading_zeros: 0,
+            curr_idx: 0,
+            index: 0,
+            w: OutputBitStream::with_capacity(values.len() * 4),
+            size: 0,
+        };
         for &val in values {
             chimpn.encode(val);
         }

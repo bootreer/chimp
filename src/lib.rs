@@ -3,6 +3,7 @@
 #![allow(unused_imports, dead_code)]
 
 use crate::bitstream::{Error, InputBitStream, OutputBitStream};
+pub mod aligned;
 pub mod bitstream;
 pub mod chimpn;
 pub mod gorilla;
@@ -116,20 +117,28 @@ impl Encoder {
         self.curr = value.to_bits();
     }
 
-    // TODO(): impl this
-    #[cfg(all(
-        any(target_arch = "x86", target_arch = "x86_64"),
-    ))]
+    // TODO: impl this
+    #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"),))]
     #[target_feature(enable = "avx2")]
     #[allow(unused_variables)]
-    unsafe fn simd_vec(&mut self, values: &Vec<f64>) {}
+    unsafe fn simd_vec(&mut self, values: &Vec<f64>) {
+        values.windows(5).for_each(|v| {
+            // only vectorizable part is really xor-ing
+        });
+    }
 
     // NOTE: timestamps?
 }
 
 impl Encode for Encoder {
     fn encode_vec(values: &Vec<f64>) -> Self {
-        let mut enc = Encoder::new();
+        // not much of a gain by guaranteeing a capacity
+        let mut enc = Encoder {            first: true,
+            curr: 0,
+            leading_zeros: u32::MAX,
+            w: OutputBitStream::with_capacity(values.len() * 8),
+            size: 0,
+        };
         for &val in values {
             enc.encode(val);
         }

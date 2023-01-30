@@ -27,16 +27,24 @@ impl error::Error for Error {
 
 #[derive(Debug, Clone)]
 pub struct OutputBitStream {
-    buffer: Vec<u8>, // maybe store as string?
-    pos: u8,         // position in curr byte
-    curr: u8,        // faster than constantly accessing buffer
+    buffer: Vec<u8>,
+    pos: u8,  // position in curr byte; 0 is right-most bit
+    curr: u8, // faster than constantly accessing buffer
 }
 
 impl OutputBitStream {
     pub fn new() -> Self {
         OutputBitStream {
             buffer: Vec::new(),
-            pos: 0, // cuz buff.len == 0
+            pos: 0,
+            curr: 0,
+        }
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        OutputBitStream {
+            buffer: Vec::with_capacity(capacity),
+            pos: 0,
             curr: 0,
         }
     }
@@ -58,7 +66,7 @@ impl OutputBitStream {
         if self.pos != 0 {
             self.buffer.push(self.curr);
         }
-        self.buffer.into_boxed_slice()
+        self.buffer.into_boxed_slice() // FIX?
     }
 
     pub fn write_bit(&mut self, bit: u8) {
