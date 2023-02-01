@@ -57,11 +57,11 @@ pub fn encode(mut enc: impl Encode, values: &Vec<f64>, enc_t: ChimpType) {
     };
 }
 
-pub fn decode(mut dec: impl Iterator<Item = u64>, values: &Vec<f64>) {
+pub fn decode(dec: impl Iterator<Item = u64>, values: &Vec<f64>) {
     let mut vec: Vec<f64> = Vec::new();
 
     let now = Instant::now();
-    while let Some(val) = dec.next() {
+    for val in dec {
         vec.push(f64::from_bits(val));
     }
 

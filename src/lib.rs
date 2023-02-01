@@ -1,6 +1,7 @@
 // FIX: Reduce boilerplate, this is starting to look too java for me
 #![warn(rust_2018_idioms, rust_2021_compatibility, nonstandard_style)]
 #![allow(unused_imports, dead_code)]
+#![feature(stdsimd)]
 
 use crate::bitstream::{Error, InputBitStream, OutputBitStream};
 pub mod aligned;
@@ -118,12 +119,20 @@ impl Encoder {
     }
 
     // TODO: impl this
-    #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"),))]
-    #[target_feature(enable = "avx2")]
+    #[cfg(all(any(target_arch = "x86", target_arch = "x86_64")))]
+    #[target_feature(enable = "avx2")] // TODO: enable AVX512
     #[allow(unused_variables)]
     unsafe fn simd_vec(&mut self, values: &Vec<f64>) {
+        // TODO: not windows
         values.windows(5).for_each(|v| {
-            // only vectorizable part is really xor-ing
+            let (a, b, c, d, e) = (v[0], v[1], v[2], v[3], v[4]);
+            let xor = _mm256_castpd_si256(_mm256_xor_pd(
+                _mm256_set_pd(a, b, c, d),
+                _mm256_set_pd(b, c, d, e),
+            ));
+
+            let leading = _mm256_lzcnt_epi64(xor);
+            // println!("{:?}", leading);
         });
     }
 
@@ -133,7 +142,8 @@ impl Encoder {
 impl Encode for Encoder {
     fn encode_vec(values: &Vec<f64>) -> Self {
         // not much of a gain by guaranteeing a capacity
-        let mut enc = Encoder {            first: true,
+        let mut enc = Encoder {
+            first: true,
             curr: 0,
             leading_zeros: u32::MAX,
             w: OutputBitStream::with_capacity(values.len() * 8),
@@ -141,6 +151,9 @@ impl Encode for Encoder {
         };
         for &val in values {
             enc.encode(val);
+        }
+        unsafe {
+            enc.simd_vec(&values);
         }
         enc
     }
@@ -294,5 +307,31 @@ mod chimp_tests {
         }
 
         assert_eq!(datapoints, float_vec);
+    }
+
+    // TODO: 
+    #[test]
+    fn simd_test() {
+        let float_vec: Vec<f64> = [
+            1.0, 1.0, 16.42, 1.0, 0.00123, 24435_f64, 0_f64, 420.69, 64.2, 49.4, 48.8, 46.4, 64.2,
+            49.4, 48.8, 46.4, 47.9, 48.7, 48.9, 48.8, 46.4, 47.9, 48.7, 48.9,
+        ]
+        .to_vec();
+
+        let mut encoder = Encoder::new();
+        unsafe {
+            encoder.simd_vec(&float_vec);
+        }
+
+
+        let (bytes, _) = encoder.close();
+        let mut decoder = Decoder::new(InputBitStream::new(bytes));
+        let mut datapoints = Vec::new();
+
+        while let Ok(val) = decoder.get_next() {
+            datapoints.push(f64::from_bits(val));
+        }
+
+        // assert_eq!(datapoints, float_vec);
     }
 }
