@@ -34,7 +34,7 @@ impl Bit {
 pub trait Encode {
     fn encode_vec(values: &Vec<f64>) -> Self;
     fn encode(&mut self, value: f64);
-    fn close(&mut self) -> (Box<[u8]>, u64);
+    fn close(self) -> (Box<[u8]>, u64);
 }
 
 // TODO: figure out better shit than 3 static arrays lmao
@@ -131,7 +131,7 @@ impl Encoder {
                 _mm256_set_pd(b, c, d, e),
             ));
 
-            let leading = _mm256_lzcnt_epi64(xor);
+            // let leading = _mm256_lzcnt_epi64(xor);
             // println!("{:?}", leading);
         });
     }
@@ -152,9 +152,6 @@ impl Encode for Encoder {
         for &val in values {
             enc.encode(val);
         }
-        unsafe {
-            enc.simd_vec(&values);
-        }
         enc
     }
 
@@ -167,10 +164,11 @@ impl Encode for Encoder {
         }
     }
 
-    fn close(&mut self) -> (Box<[u8]>, u64) {
-        self.insert_value(f64::NAN);
-        self.w.write_bit(0); // not sure why actual implementation does this
-        (self.w.clone().close(), self.size) // HACK: wtf
+    fn close(self) -> (Box<[u8]>, u64) {
+        let mut this = self;
+        this.insert_value(f64::NAN);
+        this.w.write_bit(0); // not sure why actual implementation does this
+        (this.w.close(), this.size)
     }
 }
 
@@ -309,7 +307,7 @@ mod chimp_tests {
         assert_eq!(datapoints, float_vec);
     }
 
-    // TODO: 
+    // TODO:
     #[test]
     fn simd_test() {
         let float_vec: Vec<f64> = [
@@ -322,7 +320,6 @@ mod chimp_tests {
         unsafe {
             encoder.simd_vec(&float_vec);
         }
-
 
         let (bytes, _) = encoder.close();
         let mut decoder = Decoder::new(InputBitStream::new(bytes));
