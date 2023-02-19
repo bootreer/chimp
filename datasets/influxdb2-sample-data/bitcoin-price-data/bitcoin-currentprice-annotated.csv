@@ -1,0 +1,8 @@
+#group,false,false,false,false,true,true,true,true,true,true
+#datatype,string,long,dateTime:RFC3339,double,string,string,string,string,string,string
+#default,_result,,,,,,,,,
+,result,table,_time,_value,_field,_measurement,code,crypto,description,symbol
+,,0,2023-02-19T17:20:00Z,23971.8853,price,coindesk,EUR,bitcoin,Euro,&euro;
+,,1,2023-02-19T17:20:00Z,20562.3342,price,coindesk,GBP,bitcoin,British Pound Sterling,&pound;
+,,2,2023-02-19T17:20:00Z,24608.1032,price,coindesk,USD,bitcoin,United States Dollar,&#36;
+

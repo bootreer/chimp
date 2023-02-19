@@ -1,0 +1,22 @@
+{"name": "time", "type": "timestamp"}
+{"name": "depth", "type": "field", "dataType": "float"}
+{"name": "detail", "type": "field", "dataType": "string"}
+{"name": "dmin", "type": "field", "dataType": "float"}
+{"name": "gap", "type": "field", "dataType": "float"}
+{"name": "ids", "type": "field", "dataType": "string"}
+{"name": "lat", "type": "field", "dataType": "float"}
+{"name": "lon", "type": "field", "dataType": "float"}
+{"name": "mag", "type": "field", "dataType": "float"}
+{"name": "nst", "type": "field", "dataType": "integer"}
+{"name": "place", "type": "field", "dataType": "string"}
+{"name": "rms", "type": "field", "dataType": "float"}
+{"name": "sig", "type": "field", "dataType": "integer"}
+{"name": "sources", "type": "field", "dataType": "string"}
+{"name": "status", "type": "field", "dataType": "string"}
+{"name": "types", "type": "field", "dataType": "string"}
+{"name": "url", "type": "field", "dataType": "string"}
+{"name": "code", "type": "tag"}
+{"name": "id", "type": "tag"}
+{"name": "magType", "type": "tag"}
+{"name": "net", "type": "tag"}
+{"name": "title", "type": "tag"}
