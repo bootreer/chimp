@@ -41,14 +41,14 @@ impl Encoder {
     }
 
     fn insert_value(&mut self, value: f64) {
-        let lsb_index = self.indices[(value.to_bits() as usize & LSB_MASK)];
-
         let prev_index: usize;
         let mut trail: u32 = 0;
         let mut xor: u64;
 
+        let lsb_index = self.indices[(value.to_bits() as usize & LSB_MASK)];
+
         // if value with same lsb is still in scope
-        if (self.index - lsb_index) < 128 {
+        if (self.index - lsb_index) < 128 { // in lower numbers likely 0?
             xor = value.to_bits() ^ self.stored_vals[lsb_index % 128];
             trail = xor.trailing_zeros();
 
@@ -144,10 +144,11 @@ impl Encode for Encoder {
         }
     }
 
-    fn close(&mut self) -> (Box<[u8]>, u64) {
-        self.insert_value(f64::NAN);
-        self.w.write_bit(0); // not sure why actual implementation does this
-        (self.w.clone().close(), self.size) // TODO: wtf
+    fn close(self) -> (Box<[u8]>, u64) {
+        let mut this = self;
+        this.insert_value(f64::NAN);
+        this.w.write_bit(0); // not sure why actual implementation does this
+        (this.w.close(), this.size) // TODO: wtf
     }
 }
 

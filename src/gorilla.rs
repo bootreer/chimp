@@ -71,16 +71,22 @@ impl Encoder {
 
 impl Encode for Encoder {
     fn encode_vec(values: &Vec<f64>) -> Self {
-        Encoder::new()
+        let mut enc = Encoder::new();
+        for &val in values {
+            enc.encode(val);
+        }
+        enc
+
     }
 
     fn encode(&mut self, value: f64) {
         self.insert_value(value);
     }
 
-    fn close(&mut self) -> (Box<[u8]>, u64) {
-        self.insert_value(f64::NAN);
-        (self.write.clone().close(), self.size)
+    fn close(self) -> (Box<[u8]>, u64) {
+        let mut this = self;
+        this.insert_value(f64::NAN);
+        (this.write.close(), this.size)
     }
 }
 

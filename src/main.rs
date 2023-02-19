@@ -1,4 +1,4 @@
-use chimp::{bitstream::InputBitStream, chimpn, Encode};
+use chimp::{bitstream::InputBitStream, chimpn, Encode, aligned};
 use std::time::Instant;
 
 #[derive(Debug)]
@@ -24,6 +24,18 @@ fn main() {
     println!("----------------------------------------------------");
     encode(chimpn::Encoder::new(), &values, ChimpType::ChimpN);
     println!("----------------------------------------------------");
+
+    let mut patas = aligned::Encoder::new();
+    let now = Instant::now();
+    for &val in &values {
+        patas.insert(val);
+    }
+    let new_now = Instant::now();
+    println!(
+        "per 1000 values: {:?}",
+        (new_now - now) / (values.len() / 1000) as u32
+    );
+    println!("{} bits per Value", patas.size as f64 / values.len() as f64)
 }
 
 // i've won but at what cost
