@@ -262,9 +262,9 @@ impl Iterator for Decoder {
 
         if self.first {
             self.first = false;
-            Some(self.get_first().unwrap());
+            self.get_first().unwrap();
         } else {
-            Some(self.get_value().unwrap());
+            self.get_value().unwrap();
         }
 
         if self.curr == NAN {

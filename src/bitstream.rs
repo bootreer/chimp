@@ -69,12 +69,14 @@ impl OutputBitStream {
         self.buffer.into_boxed_slice() // FIX?
     }
 
+    #[inline(always)]
     pub fn write_bit(&mut self, bit: u8) {
         self.check_grow();
         self.curr |= (bit & 1) << (7 - self.pos);
         self.pos += 1;
     }
 
+    #[inline(always)]
     pub fn write_byte(&mut self, byte: u8) {
         if self.pos == 8 {
             self.grow();
@@ -92,6 +94,7 @@ impl OutputBitStream {
 
     // NOTE: maybe make len u8
     // len \in [0,64]
+    #[inline(always)]
     pub fn write_bits(&mut self, mut bits: u64, mut len: u32) {
         while len >= 8 {
             len -= 8;
@@ -106,7 +109,7 @@ impl OutputBitStream {
         // TODO: maybe fit what can be fit and recursive call?
         // if we can fit all in one go
         if 8 - self.pos >= len as u8 {
-            bits = bits << (8 - len - self.pos as u32);
+            bits <<= 8 - len - self.pos as u32;
             self.curr |= bits as u8;
             self.pos += len as u8;
             return;
@@ -115,6 +118,7 @@ impl OutputBitStream {
         for _ in 0..len {
             let to_write = bits >> (len - 1);
             self.write_bit(to_write as u8);
+            // this does not mutate the bound of the loop which is intended
             len -= 1;
         }
     }
@@ -136,6 +140,7 @@ impl InputBitStream {
         }
     }
 
+    #[inline(always)]
     pub fn read_bit(&mut self) -> Result<Bit, Error> {
         if self.pos == 8 {
             self.index += 1;
@@ -151,6 +156,7 @@ impl InputBitStream {
         }
     }
 
+    #[inline(always)]
     fn read_byte(&mut self) -> Result<u8, Error> {
         if self.pos == 8 {
             self.index += 1;
@@ -174,6 +180,7 @@ impl InputBitStream {
         Ok(byte)
     }
 
+    #[inline(always)]
     pub fn read_bits(&mut self, mut len: u32) -> Result<u64, Error> {
         if len > 64 {
             len = 64;

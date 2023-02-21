@@ -43,28 +43,27 @@ impl Encoder {
     // TODO: fix this boy
     #[allow(unused_variables, unused_mut)]
     fn insert_value(&mut self, value: f64) {
-        let prev_index: usize;
-        let lead: u32;
-        let trail: u32;
-        let mut xor: u64;
-
         let mut lsb_index = self.indices[(value.to_bits() as usize & LSB_MASK)];
         // not sure about the first condition
-        if lsb_index > 128 || (self.index - lsb_index) >= 128 {
-            lsb_index = 128; // ???
+        if self.index < lsb_index || (self.index - lsb_index) >= 128 {
+            lsb_index = self.index; // ???
         }
         let ref_value = self.stored_vals[lsb_index % 128];
 
-        xor = ref_value ^ value.to_bits();
-        trail = xor.trailing_zeros();
-        lead = xor.leading_zeros();
+        let xor = ref_value ^ value.to_bits();
+        let trail = xor.trailing_zeros();
+        let lead = xor.leading_zeros();
 
-        let is_equal = if xor == 0 { 0 } else { 1 };
+        let is_equal = if xor == 0 { 1 } else { 0 };
         let sig_bits = if xor == 0 { 0 } else { 64 - trail - lead };
-        // let sig_bytes = (sig_bits >> 3) + if sig_bits & 7 != 0 { 1 } else { 0 };
+        let sig_bytes = (sig_bits >> 3) + if sig_bits & 7 != 0 { 1 } else { 0 };
 
-        self.w.write_bits(xor.wrapping_shl(trail - is_equal), sig_bits);
-        self.size += sig_bits as u64;
+        let packed_metadata = (lsb_index as u32) << 9 | sig_bytes << 6 | trail;
+
+        self.w.write_bits(packed_metadata  as u64, 16);
+        self.w.write_bits(xor.wrapping_shl(trail - is_equal), sig_bytes * 8);
+        self.size += sig_bytes as u64 * 8;  
+        self.size += 16;
 
         self.curr_idx += 1;
         self.curr_idx %= 128;
@@ -84,4 +83,35 @@ impl Encoder {
         }
     }
 
+}
+
+pub struct Decoder {
+    first: bool,
+    done: bool,
+
+    stored_vals: Vec<u64>,
+    curr: u64, // curr stored value
+    curr_idx: usize,
+    leading_zeros: u32,
+    trailing_zeros: u32,
+    r: InputBitStream,
+}
+
+// prev_values = 128
+// prev_values_log = 7
+// initial_fill = 7 + 9 = 16
+
+impl Decoder {
+    pub fn new(r: InputBitStream) -> Self {
+        Decoder {
+            first: true,
+            done: false,
+            stored_vals: (0..128).collect(),
+            curr: 0,
+            curr_idx: 0,
+            leading_zeros: u32::MAX,
+            trailing_zeros: 0,
+            r,
+        }
+    }
 }
