@@ -43,7 +43,7 @@ impl Encoder {
     // TODO: fix this boy
     #[allow(unused_variables, unused_mut)]
     fn insert_value(&mut self, value: f64) {
-        let mut lsb_index = self.indices[(value.to_bits() as usize & LSB_MASK)];
+        let mut lsb_index = self.indices[value.to_bits() as usize & LSB_MASK];
         // not sure about the first condition
         if self.index < lsb_index || (self.index - lsb_index) >= 128 {
             lsb_index = self.index; // ???

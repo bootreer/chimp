@@ -123,17 +123,35 @@ impl Encoder {
     #[target_feature(enable = "avx2")] // TODO: enable AVX512
     #[allow(unused_variables)]
     unsafe fn simd_vec(&mut self, values: &Vec<f64>) {
-        // TODO: not windows
-        values.windows(5).for_each(|v| {
-            let (a, b, c, d, e) = (v[0], v[1], v[2], v[3], v[4]);
+        let v = values; // bruh moment
+        self.insert_first(values[0]);
+
+        let mut i = 0;
+
+        //  we can in max. do xor on 4 values -> 4 new entries at a time
+        //  windows() doesn't work as there would be too many overlapping xor-ed values -> increment i by 4 every iteration
+        while i < values.len() - 4 {
+            // mem::transmute maybe
+            let (a, b, c, d, e) = (v[i], v[i + 1], v[i + 2], v[i + 3], v[i + 4]);
+            // println!("a: {a}, b: {b}, c: {c}, d: {d}, e: {e}");
+
+            // lol switch to mm512
             let xor = _mm256_castpd_si256(_mm256_xor_pd(
                 _mm256_set_pd(a, b, c, d),
                 _mm256_set_pd(b, c, d, e),
             ));
+            let leading = _mm256_lzcnt_epi64(xor);
 
-            // let leading = _mm256_lzcnt_epi64(xor);
-            // println!("{:?}", leading);
-        });
+            // since there is no trailing zero simd intrinsic and we only need to check if bottom
+            // 6 bits are set
+            let trail_threshold = _mm256_and_si256(xor, _mm256_set1_epi64x(0x3f));
+
+            // println!("xor:         {:?}", xor);
+            // println!("leading:     {:?}", leading);
+            // println!("trail thres: {:?}", trail_threshold);
+
+            i += 4;
+        }
     }
 
     // NOTE: timestamps?

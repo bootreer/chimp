@@ -45,7 +45,7 @@ impl Encoder {
         let mut trail: u32 = 0;
         let mut xor: u64;
 
-        let lsb_index = self.indices[(value.to_bits() as usize & LSB_MASK)];
+        let lsb_index = self.indices[value.to_bits() as usize & LSB_MASK];
 
         // if value with same lsb is still in scope
         if (self.index - lsb_index) < 128 { // in lower numbers likely 0?

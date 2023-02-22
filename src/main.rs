@@ -15,7 +15,7 @@ fn main() {
 
     for record in reader.unwrap().records() {
         let string_record = record.unwrap();
-        let val = string_record[7].to_string();
+        let val = string_record[2].to_string();
         let val = val.parse::<f64>().unwrap();
         values.push(val);
     }

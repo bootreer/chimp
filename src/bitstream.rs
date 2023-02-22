@@ -25,7 +25,7 @@ impl error::Error for Error {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct OutputBitStream {
     buffer: Vec<u8>,
     pos: u8,  // position in curr byte; 0 is right-most bit
@@ -49,6 +49,7 @@ impl OutputBitStream {
         }
     }
 
+    #[inline(always)]
     fn check_grow(&mut self) {
         if self.pos == 8 {
             self.buffer.push(self.curr); // increase size
@@ -57,6 +58,7 @@ impl OutputBitStream {
         }
     }
 
+    #[inline(always)]
     fn grow(&mut self) {
         self.buffer.push(self.curr);
         self.curr = 0;
