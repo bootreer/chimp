@@ -126,7 +126,7 @@ impl Encode for Encoder {
             leading_zeros: 0,
             curr_idx: 0,
             index: 0,
-            w: OutputBitStream::with_capacity(values.len() * 4),
+            w: OutputBitStream::with_capacity(values.len()/2),
             size: 0,
         };
         for &val in values {
@@ -144,7 +144,7 @@ impl Encode for Encoder {
         }
     }
 
-    fn close(self) -> (Box<[u8]>, u64) {
+    fn close(self) -> (Box<[u64]>, u64) {
         let mut this = self;
         this.insert_value(f64::NAN);
         this.w.write_bit(0); // not sure why actual implementation does this

@@ -34,7 +34,7 @@ impl Bit {
 pub trait Encode {
     fn encode_vec(values: &Vec<f64>) -> Self;
     fn encode(&mut self, value: f64);
-    fn close(self) -> (Box<[u8]>, u64);
+    fn close(self) -> (Box<[u64]>, u64);
 }
 
 // TODO: figure out better shit than 3 static arrays lmao
@@ -164,7 +164,7 @@ impl Encode for Encoder {
             first: true,
             curr: 0,
             leading_zeros: u32::MAX,
-            w: OutputBitStream::with_capacity(values.len() * 8),
+            w: OutputBitStream::with_capacity(values.len()),
             size: 0,
         };
         for &val in values {
@@ -182,7 +182,7 @@ impl Encode for Encoder {
         }
     }
 
-    fn close(self) -> (Box<[u8]>, u64) {
+    fn close(self) -> (Box<[u64]>, u64) {
         let mut this = self;
         this.insert_value(f64::NAN);
         this.w.write_bit(0); // not sure why actual implementation does this

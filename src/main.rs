@@ -39,6 +39,7 @@ fn main() {
 }
 
 // i've won but at what cost
+#[allow(unused_variables)]
 pub fn encode(mut enc: impl Encode, values: &Vec<f64>, enc_t: ChimpType) {
     let now = Instant::now();
     for val in values {
@@ -62,11 +63,11 @@ pub fn encode(mut enc: impl Encode, values: &Vec<f64>, enc_t: ChimpType) {
         (new_now - now) / (values.len() / 1000) as u32
     );
 
-    let bitstream = InputBitStream::new(bytes);
-    match enc_t {
-        ChimpType::Chimp => decode(chimp::Decoder::new(bitstream), values),
-        ChimpType::ChimpN => decode(chimpn::Decoder::new(bitstream), values),
-    };
+    // let bitstream = InputBitStream::new(bytes);
+    // match enc_t {
+    //     ChimpType::Chimp => decode(chimp::Decoder::new(bitstream), values),
+    //     ChimpType::ChimpN => decode(chimpn::Decoder::new(bitstream), values),
+    // };
 }
 
 pub fn decode(dec: impl Iterator<Item = u64>, values: &Vec<f64>) {
