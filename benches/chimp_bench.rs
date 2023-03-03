@@ -1,3 +1,4 @@
+use chimp_lib::{chimp, Encode};
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::time::Duration;
 
@@ -14,7 +15,7 @@ fn chimp_enc(c: &mut Criterion) {
 
     c.bench_function("encode city temps", |b| {
         b.iter(|| {
-            let _: chimp::Encoder = chimp::Encode::encode_vec(&values);
+            let _: chimp::Encoder = chimp::Encoder::encode_vec(&values);
         })
     });
 }

@@ -1,5 +1,5 @@
 use crate::bitstream::{Error, InputBitStream, OutputBitStream};
-use crate::{Bit, Encode, NAN};
+use crate::{Bit, Decode, Encode, NAN};
 
 #[derive(Debug)]
 pub struct Encoder {
@@ -76,7 +76,6 @@ impl Encode for Encoder {
             enc.encode(val);
         }
         enc
-
     }
 
     fn encode(&mut self, value: f64) {
@@ -153,6 +152,12 @@ impl Decoder {
         } else {
             Ok(res)
         }
+    }
+}
+
+impl Decode for Decoder {
+    fn get_next(&mut self) -> Result<u64, Error> {
+        self.get_next()
     }
 }
 

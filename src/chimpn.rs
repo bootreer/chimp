@@ -48,7 +48,8 @@ impl Encoder {
         let lsb_index = self.indices[value.to_bits() as usize & LSB_MASK];
 
         // if value with same lsb is still in scope
-        if (self.index - lsb_index) < 128 { // in lower numbers likely 0?
+        if (self.index - lsb_index) < 128 {
+            // in lower numbers likely 0?
             xor = value.to_bits() ^ self.stored_vals[lsb_index % 128];
             trail = xor.trailing_zeros();
 
@@ -126,7 +127,7 @@ impl Encode for Encoder {
             leading_zeros: 0,
             curr_idx: 0,
             index: 0,
-            w: OutputBitStream::with_capacity(values.len()/2),
+            w: OutputBitStream::with_capacity(values.len() / 2),
             size: 0,
         };
         for &val in values {
@@ -256,27 +257,9 @@ impl Decoder {
     }
 }
 
-impl Iterator for Decoder {
-    type Item = u64;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.done {
-            return None;
-        }
-
-        if self.first {
-            self.first = false;
-            self.get_first().unwrap();
-        } else {
-            self.get_value().unwrap();
-        }
-
-        if self.curr == NAN {
-            self.done = true;
-            None
-        } else {
-            Some(self.curr)
-        }
+impl Decode for Decoder {
+    fn get_next(&mut self) -> Result<u64, Error> {
+        self.get_next()
     }
 }
 

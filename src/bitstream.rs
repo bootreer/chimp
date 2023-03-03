@@ -68,29 +68,21 @@ impl OutputBitStream {
         if self.pos != 0 {
             self.buffer.push(self.curr);
         }
-        println!(
-            "[OutputBitStream Stats]\nSize of buffer: {}\nNumber of bits: {}",
-            self.buffer.len(),
-            self.buffer.len() * 64
-        );
         self.buffer.into_boxed_slice() // FIX?
     }
 
     #[inline(always)]
     pub fn write_bit(&mut self, bit: u8) {
         self.check_grow();
-        self.curr |= ((bit & 1) as u64) << (63 - self.pos);
         self.pos += 1;
+        self.curr |= ((bit & 1) as u64) << (64 - self.pos);
     }
 
     // might be able to remove this entirely for u64
     #[inline(always)]
     pub fn write_byte(&mut self, byte: u8) {
         let byte: u64 = byte as u64;
-        if self.pos == 64 {
-            self.grow();
-            self.pos = 0;
-        }
+        self.check_grow();
 
         if 64 - self.pos < 8 {
             self.curr |= (byte >> self.pos) as u64;
@@ -109,6 +101,7 @@ impl OutputBitStream {
     // len \in [0,64]
     #[inline(always)]
     pub fn write_bits(&mut self, mut bits: u64, mut len: u32) {
+        self.check_grow();
         // TODO: maybe fit what can be fit and recursive call?
         // if we can fit all in one go
         if 64 - self.pos < len as u8 {
@@ -206,8 +199,8 @@ impl InputBitStream {
             self.pos = 0;
         }
 
-        bits |= self.curr >> (64 - self.pos as u32 - len);
         self.pos += len as u8;
+        bits |= self.curr >> (64 - self.pos as u32);
 
         Ok(bits & bit_mask)
     }
@@ -239,7 +232,7 @@ mod tests {
     fn write_and_close() {
         let mut b = OutputBitStream::new();
         for i in 0..8 {
-            b.write_bit(i % 3); // 1001_0010
+            b.write_bit(i % 3); // 0100_1001
         }
         // 0001
         b.write_bits(1, 4);
@@ -252,16 +245,26 @@ mod tests {
 
         b.write_bit(1);
 
-        b.write_byte(0b1000_1110);
-        b.write_byte(0b0100_1001);
-        b.write_byte(0b0000_0110);
+        b.write_bits(0b1000_1110, 8);
+        b.write_bits(0b0100_1001, 8);
+        b.write_bits(0b0000_0110, 8);
         b.write_bit(1);
         b.write_bits(0b101, 3);
-        let slice = b.close().into_vec();
+        let slice = b.close();
 
-        // 1001_0010 | 0001_0000 | 0000_0000 | 0000_1100 | 1100_0101 | 1100_0111 |
-        // 0010_0100 | 1000_011 | 0110_1000
-        assert_eq!(slice.len(), 9);
+        // 1001_0010|0001_0000|0000_0000|0000_1100|1100_0101|1100_0111|0010_0100|1000_0110
+        // 0110_1000
+        assert_eq!(slice.len(), 2);
+
+        let mut r = InputBitStream::new(slice);
+        assert_eq!(r.read_bits(4).unwrap(), 0b0100);
+        assert_eq!(r.read_bits(1).unwrap(), 0b1);
+        assert_eq!(r.read_bits(1).unwrap(), 0b0);
+        assert_eq!(r.read_bits(2).unwrap(), 0b01);
+
+        assert_eq!(r.read_bits(4).unwrap(), 1);
+        assert_eq!(r.read_bits(21).unwrap(), 0b11001);
+
     }
 
     #[test]

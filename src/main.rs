@@ -1,4 +1,5 @@
-use chimp::{bitstream::InputBitStream, chimpn, Encode, aligned};
+use chimp_lib::{aligned, bitstream::InputBitStream, chimp, chimpn, Decode, Encode};
+
 use std::time::Instant;
 
 #[derive(Debug)]
@@ -63,19 +64,19 @@ pub fn encode(mut enc: impl Encode, values: &Vec<f64>, enc_t: ChimpType) {
         (new_now - now) / (values.len() / 1000) as u32
     );
 
-    // let bitstream = InputBitStream::new(bytes);
-    // match enc_t {
-    //     ChimpType::Chimp => decode(chimp::Decoder::new(bitstream), values),
-    //     ChimpType::ChimpN => decode(chimpn::Decoder::new(bitstream), values),
-    // };
+    let bitstream = InputBitStream::new(bytes);
+    match enc_t {
+        ChimpType::Chimp => decode(chimp::Decoder::new(bitstream), values),
+        ChimpType::ChimpN => decode(chimpn::Decoder::new(bitstream), values),
+    };
 }
 
-pub fn decode(dec: impl Iterator<Item = u64>, values: &Vec<f64>) {
+pub fn decode(mut dec: impl Decode, values: &Vec<f64>) {
     let mut vec: Vec<f64> = Vec::new();
-
     let now = Instant::now();
-    for val in dec {
-        vec.push(f64::from_bits(val));
+
+    while let Ok(dec_val) = dec.get_next() {
+        vec.push(f64::from_bits(dec_val));
     }
 
     let new_now = Instant::now();

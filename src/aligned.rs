@@ -60,9 +60,10 @@ impl Encoder {
 
         let packed_metadata = (lsb_index as u32) << 9 | sig_bytes << 6 | trail;
 
-        self.w.write_bits(packed_metadata  as u64, 16);
-        self.w.write_bits(xor.wrapping_shl(trail - is_equal), sig_bytes * 8);
-        self.size += sig_bytes as u64 * 8;  
+        self.w.write_bits(packed_metadata as u64, 16);
+        self.w
+            .write_bits(xor.wrapping_shl(trail - is_equal), sig_bytes * 8);
+        self.size += sig_bytes as u64 * 8;
         self.size += 16;
 
         self.curr_idx += 1;
@@ -74,7 +75,7 @@ impl Encoder {
         self.indices[value.to_bits() as usize & LSB_MASK] = self.index;
     }
 
-    pub fn insert(&mut self, value: f64) { 
+    pub fn insert(&mut self, value: f64) {
         if self.first {
             self.insert_first(value);
             self.first = false;
@@ -82,7 +83,6 @@ impl Encoder {
             self.insert_value(value);
         }
     }
-
 }
 
 pub struct Decoder {
