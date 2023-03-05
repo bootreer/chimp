@@ -32,11 +32,33 @@ fn main() {
         patas.insert(val);
     }
     let new_now = Instant::now();
+    let (buffer, size) = patas.close();
     println!(
         "per 1000 values: {:?}",
         (new_now - now) / (values.len() / 1000) as u32
     );
-    println!("{} bits per Value", patas.size as f64 / values.len() as f64)
+    println!("{} bits per Value", size as f64 / values.len() as f64);
+
+    let mut dec = aligned::Decoder::new(InputBitStream::new(buffer));
+    let mut vec: Vec<f64> = Vec::new();
+    let now = Instant::now();
+
+    while let Ok(dec_val) = dec.get_next() {
+        vec.push(f64::from_bits(dec_val));
+    }
+
+    let new_now = Instant::now();
+    println!(
+        "time required to decode {} values: {:?}",
+        values.len(),
+        new_now - now
+    );
+    println!(
+        "per 1000 values: {:?}",
+        (new_now - now) / (vec.len() / 1000) as u32
+    );
+    println!("size of vector: {}", vec.len());
+    // assert_eq!(&vec, &values);
 }
 
 // i've won but at what cost
@@ -87,7 +109,7 @@ pub fn decode(mut dec: impl Decode, values: &Vec<f64>) {
     );
     println!(
         "per 1000 values: {:?}",
-        (new_now - now) / (values.len() / 1000) as u32
+        (new_now - now) / (vec.len() / 1000) as u32
     );
     assert_eq!(&vec, values);
 }

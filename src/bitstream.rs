@@ -27,8 +27,8 @@ impl error::Error for Error {
 
 #[derive(Debug)]
 pub struct OutputBitStream {
-    buffer: Vec<u64>,
-    pos: u8,   // position in curr byte; 0 is right-most bit
+    pub buffer: Vec<u64>,
+    pos: u32,   // position in curr byte; 0 is right-most bit
     curr: u64, // faster than constantly accessing buffer
 }
 
@@ -54,7 +54,7 @@ impl OutputBitStream {
         if self.pos == 64 {
             self.buffer.push(self.curr); // increase size
             self.pos = 0;
-            self.curr = 0
+            self.curr = 0;
         }
     }
 
@@ -65,6 +65,7 @@ impl OutputBitStream {
     }
 
     pub fn close(mut self) -> Box<[u64]> {
+        // println!("Buffer stats: Bits used: {}", (self.buffer.len() * 64) + self.pos as usize);
         if self.pos != 0 {
             self.buffer.push(self.curr);
         }
@@ -87,7 +88,7 @@ impl OutputBitStream {
         if 64 - self.pos < 8 {
             self.curr |= (byte >> self.pos) as u64;
             self.grow();
-            let byte: u128 = (byte as u128) << (self.pos); // to avoid overflow
+            let byte: u128 = (byte as u128) << self.pos; // to avoid overflow
             self.curr |= byte as u64;
             self.pos = (self.pos + 8) & 63;
             return;
@@ -101,19 +102,21 @@ impl OutputBitStream {
     // len \in [0,64]
     #[inline(always)]
     pub fn write_bits(&mut self, mut bits: u64, mut len: u32) {
+        // if len == 0 {
+        //     return;
+        // }
+
         self.check_grow();
-        // TODO: maybe fit what can be fit and recursive call?
-        // if we can fit all in one go
-        if 64 - self.pos < len as u8 {
+
+        if 64 - self.pos < len {
             len -= (64 - self.pos) as u32;
             self.curr |= bits.overflowing_shr(len).0;
             self.grow();
             self.pos = 0;
         }
-
-        bits <<= (64 - len) - self.pos as u32;
+        bits <<= (64 - len) - self.pos;
         self.curr |= bits;
-        self.pos += len as u8;
+        self.pos += len;
     }
 }
 
@@ -264,7 +267,6 @@ mod tests {
 
         assert_eq!(r.read_bits(4).unwrap(), 1);
         assert_eq!(r.read_bits(21).unwrap(), 0b11001);
-
     }
 
     #[test]

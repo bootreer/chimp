@@ -161,14 +161,12 @@ pub struct Decoder {
     curr: u64, // curr stored value
     curr_idx: usize,
     leading_zeros: u32,
-    trailing_zeros: u32,
     r: InputBitStream,
 }
 
 // prev_values = 128
 // prev_values_log = 7
 // initial_fill = 7 + 9 = 16
-
 impl Decoder {
     pub fn new(r: InputBitStream) -> Self {
         Decoder {
@@ -178,7 +176,6 @@ impl Decoder {
             curr: 0,
             curr_idx: 0,
             leading_zeros: u32::MAX,
-            trailing_zeros: 0,
             r,
         }
     }
@@ -211,9 +208,9 @@ impl Decoder {
                     center_bits = 64;
                 }
 
-                self.trailing_zeros = 64 - center_bits as u32 - self.leading_zeros;
+                let trailing_zeros = 64 - center_bits as u32 - self.leading_zeros;
                 xor = self.r.read_bits(center_bits as u32)?;
-                self.curr ^= xor << self.trailing_zeros;
+                self.curr ^= xor << trailing_zeros;
             }
             2 => {
                 xor = self.r.read_bits(64 - self.leading_zeros)?;

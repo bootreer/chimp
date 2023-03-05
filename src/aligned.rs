@@ -4,10 +4,10 @@ use crate::*;
 // added this to have decode and encode perform better
 
 // Based off of the Patas compression implemented in DuckDB
+// need to fix close? and test some edge cases for encoding
 #[derive(Debug)]
 pub struct Encoder {
     first: bool,
-    leading_zeros: u32,
     w: OutputBitStream,
     pub size: u64,
     curr_idx: usize,
@@ -23,7 +23,6 @@ impl Encoder {
             first: true,
             stored_vals: vec![0; 128],
             indices: vec![usize::MAX; 2_usize.pow(14)],
-            leading_zeros: 0,
             curr_idx: 0,
             index: 0,
             w: OutputBitStream::new(),
@@ -41,28 +40,29 @@ impl Encoder {
     }
 
     // TODO: fix this boy
-    #[allow(unused_variables, unused_mut)]
     fn insert_value(&mut self, value: f64) {
         let mut lsb_index = self.indices[value.to_bits() as usize & LSB_MASK];
-        // not sure about the first condition
+
+        // is not in ring buffer --> take previous
         if self.index < lsb_index || (self.index - lsb_index) >= 128 {
-            lsb_index = self.index; // ???
+            lsb_index = self.index;
         }
-        let ref_value = self.stored_vals[lsb_index % 128];
+        lsb_index %= 128;
+        let ref_value = self.stored_vals[lsb_index];
 
         let xor = ref_value ^ value.to_bits();
         let trail = xor.trailing_zeros();
         let lead = xor.leading_zeros();
 
-        let is_equal = if xor == 0 { 1 } else { 0 };
         let sig_bits = if xor == 0 { 0 } else { 64 - trail - lead };
         let sig_bytes = (sig_bits >> 3) + if sig_bits & 7 != 0 { 1 } else { 0 };
 
-        let packed_metadata = (lsb_index as u32) << 9 | sig_bytes << 6 | trail;
+        let packed_metadata = (lsb_index as u32) << 9 | sig_bytes << 6 | (trail & 0x3f);
 
         self.w.write_bits(packed_metadata as u64, 16);
-        self.w
-            .write_bits(xor.wrapping_shl(trail - is_equal), sig_bytes * 8);
+        if xor != 0 {
+            self.w.write_bits(xor >> trail, sig_bytes * 8);
+        }
         self.size += sig_bytes as u64 * 8;
         self.size += 16;
 
@@ -73,6 +73,13 @@ impl Encoder {
 
         self.index += 1;
         self.indices[value.to_bits() as usize & LSB_MASK] = self.index;
+
+        // println!("-------------------------------------");
+        // println!("value:   : {}", value);
+        // println!("{:016b}", packed_metadata);
+        // println!("lsb_idx  : {:07b}", lsb_index);
+        // println!("sig_bytes: {:03b}", sig_bytes);
+        // println!("trail    : {:06b}", trail);
     }
 
     pub fn insert(&mut self, value: f64) {
@@ -85,6 +92,40 @@ impl Encoder {
     }
 }
 
+impl Encode for Encoder {
+    fn encode_vec(values: &Vec<f64>) -> Self {
+        let mut patas = Encoder {
+            first: true,
+            stored_vals: vec![0; 128],
+            indices: vec![0; 2_usize.pow(14)],
+            curr_idx: 0,
+            index: 0,
+            w: OutputBitStream::with_capacity(values.len() / 2),
+            size: 0,
+        };
+        for &val in values {
+            patas.encode(val);
+        }
+        patas
+    }
+
+    fn encode(&mut self, value: f64) {
+        if self.first {
+            self.first = false;
+            self.insert_first(value);
+        } else {
+            self.insert_value(value);
+        }
+    }
+
+    fn close(self) -> (Box<[u64]>, u64) {
+        let mut this = self;
+        this.w.write_bits(0xffff, 16);
+        this.w.write_bit(0); // not sure why actual implementation does this
+        (this.w.close(), this.size)
+    }
+}
+
 pub struct Decoder {
     first: bool,
     done: bool,
@@ -92,14 +133,8 @@ pub struct Decoder {
     stored_vals: Vec<u64>,
     curr: u64, // curr stored value
     curr_idx: usize,
-    leading_zeros: u32,
-    trailing_zeros: u32,
     r: InputBitStream,
 }
-
-// prev_values = 128
-// prev_values_log = 7
-// initial_fill = 7 + 9 = 16
 
 impl Decoder {
     pub fn new(r: InputBitStream) -> Self {
@@ -109,9 +144,112 @@ impl Decoder {
             stored_vals: (0..128).collect(),
             curr: 0,
             curr_idx: 0,
-            leading_zeros: u32::MAX,
-            trailing_zeros: 0,
             r,
         }
+    }
+
+    fn get_first(&mut self) -> Result<(), Error> {
+        self.curr = self.r.read_bits(64)?;
+        self.stored_vals[self.curr_idx] = self.curr;
+        Ok(())
+    }
+
+    #[allow(unused)]
+    fn get_value(&mut self) -> Result<(), Error> {
+        let packed_metadata = self.r.read_bits(16)?;
+
+        let lsb_index = packed_metadata as usize >> 9;
+        let sig_bytes = (packed_metadata as u32 >> 6) & 0b111;
+        let trail = packed_metadata & 0x3f;
+        // println!("-------------------------------------");
+        // println!("curr:    : {}", f64::from_bits(self.curr));
+        // println!("{:016b}", packed_metadata);
+        // println!("lsb_idx  : {:07b}", lsb_index);
+        // println!("sig_bytes: {:03b}", sig_bytes);
+        // println!("trail    : {:06b}", trail);
+
+        if sig_bytes == 7 && trail == 63 {
+            self.curr = NAN;
+            return Ok(());
+        }
+
+        if sig_bytes == 0 {
+            self.curr = self.stored_vals[lsb_index];
+        } else {
+            let ref_value = self.stored_vals[lsb_index];
+            let xor = self.r.read_bits(sig_bytes * 8)? << trail;
+            self.curr = ref_value ^ xor;
+        }
+
+        self.curr_idx += 1;
+        self.curr_idx %= 128;
+        self.stored_vals[self.curr_idx] = self.curr;
+
+        Ok(())
+    }
+    pub fn get_next(&mut self) -> Result<u64, Error> {
+        if self.done {
+            return Err(Error::EOF);
+        }
+
+        if self.first {
+            self.get_first()?;
+            self.first = false;
+        } else {
+            self.get_value()?;
+        }
+
+        if self.curr == NAN {
+            Err(Error::EOF)
+        } else {
+            Ok(self.curr)
+        }
+    }
+}
+
+impl Decode for Decoder {
+    fn get_next(&mut self) -> Result<u64, Error> {
+        self.get_next()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{Decoder, Encoder};
+    use crate::bitstream::InputBitStream;
+    use crate::Encode;
+
+    #[test]
+    fn simple_test() {
+        let float_vec: Vec<f64> = [
+            49.4, 48.8, 46.4, 47.9, 48.7, 48.9, 48.8, 46.4, 47.9, 48.7, 48.9,
+        ]
+        .to_vec();
+
+        let mut encoder = Encoder::new();
+
+        for val in &float_vec {
+            encoder.encode(*val);
+        }
+
+        for val in &encoder.w.buffer {
+            println!("{:064b}", *val);
+        }
+        // 0000000|110|000000 || 110101010101010101010101010101010101010101010101
+
+        let (bytes, _) = encoder.close();
+        let mut decoder = Decoder::new(InputBitStream::new(bytes));
+        let mut datapoints = Vec::new();
+
+        // let mut i = 0;
+        while let Ok(val) = decoder.get_next() {
+            // if i == 11 {
+            //     break;
+            // }
+            // i += 1;
+            datapoints.push(f64::from_bits(val));
+        }
+
+        assert_eq!(datapoints, float_vec);
     }
 }
