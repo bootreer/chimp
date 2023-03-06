@@ -1,6 +1,3 @@
-#datatype,string,long,string,string,dateTime:RFC3339,double,string,string
-#group,false,false,true,true,false,false,true,true
-#default,,,,,,,,
 ,result,table,_field,_measurement,_time,_value,id,s2_cell_id
 ,_result,0,lat,migration,2019-04-01T13:00:00Z,8.3495,91752A,164b35c
 ,_result,1,lat,migration,2019-04-01T07:00:00Z,8.56067,91752A,164b3dc

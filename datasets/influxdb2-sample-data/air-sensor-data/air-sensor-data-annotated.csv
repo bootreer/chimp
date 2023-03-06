@@ -1,6 +1,3 @@
-#group,false,false,false,false,true,true,true
-#datatype,string,long,dateTime:RFC3339,double,string,string,string
-#default,_result,,,,,,
 ,result,table,_time,_value,_field,_measurement,sensor_id
 ,,0,2023-02-19T16:21:58Z,0.5177047423283471,co,airSensors,TLM0100
 ,,0,2023-02-19T16:22:08Z,0.515372766735673,co,airSensors,TLM0100

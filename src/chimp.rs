@@ -1,5 +1,6 @@
 use crate::bitstream::*;
 use crate::{Bit, Decode, Encode, LEADING_REPR_DEC, LEADING_REPR_ENC, LEADING_ROUND, NAN};
+use crossbeam;
 
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
@@ -12,7 +13,6 @@ pub struct Encoder {
     curr: u64, // current float value as bits
     leading_zeros: u32,
     w: OutputBitStream,
-    size: u64,
 }
 
 impl Encoder {
@@ -22,14 +22,12 @@ impl Encoder {
             curr: 0,
             leading_zeros: u32::MAX,
             w: OutputBitStream::new(),
-            size: 0,
         }
     }
 
     fn insert_first(&mut self, value: f64) {
         self.curr = value.to_bits();
         self.w.write_bits(self.curr, 64);
-        self.size += 64;
     }
 
     fn insert_value(&mut self, value: f64) {
@@ -45,9 +43,9 @@ impl Encoder {
     fn enc_aux(&mut self, xor: u64, trailing: u64) {
         if xor == 0 {
             self.w.write_bits(0, 2);
-            self.size += 2;
             return;
         }
+
         let lead = LEADING_ROUND[xor.leading_zeros() as usize];
 
         // we and-ed with 0b11_1111
@@ -62,8 +60,6 @@ impl Encoder {
             self.w.write_bits(center_bits as u64, 6);
             self.w.write_bits(xor >> trail, center_bits);
             self.leading_zeros = 65;
-
-            self.size += 11 + center_bits as u64;
         } else {
             self.w.write_bit(1);
             if lead == self.leading_zeros {
@@ -72,12 +68,8 @@ impl Encoder {
                 self.leading_zeros = lead;
                 self.w.write_bit(1);
                 self.w.write_bits(LEADING_REPR_ENC[lead as usize] as u64, 3);
-
-                self.size += 3;
             }
             self.w.write_bits(xor, 64 - lead);
-
-            self.size += 66 - lead as u64;
         }
     }
 
@@ -159,7 +151,6 @@ impl Encode for Encoder {
             curr: 0,
             leading_zeros: u32::MAX,
             w: OutputBitStream::with_capacity(values.len()),
-            size: 0,
         };
         for &val in values {
             enc.encode(val);
@@ -180,7 +171,9 @@ impl Encode for Encoder {
         let mut this = self;
         this.insert_value(f64::NAN);
         this.w.write_bit(0); // not sure why actual implementation does this
-        (this.w.close(), this.size)
+        let buffer = this.w.close();
+        let len = &buffer.len() * 64;
+        (buffer, len as u64)
     }
 }
 

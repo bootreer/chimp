@@ -1,8 +1,8 @@
 use crate::*;
 
 // Chimp N (= 128)
-pub const THRESHOLD: usize = 13;
-pub const LSB_MASK: usize = 0x3FFF;
+pub const THRESHOLD: u32 = 13;
+pub const LSB_MASK: u64 = 0x3FFF;
 
 pub struct Encoder {
     first: bool,
@@ -33,7 +33,7 @@ impl Encoder {
 
     fn insert_first(&mut self, value: f64) {
         self.stored_vals[self.index] = value.to_bits();
-        self.indices[value.to_bits() as usize & LSB_MASK] = self.index;
+        self.indices[(value.to_bits() & LSB_MASK) as usize] = self.index;
 
         self.w.write_bits(value.to_bits(), 64);
 
@@ -45,7 +45,7 @@ impl Encoder {
         let mut trail: u32 = 0;
         let mut xor: u64;
 
-        let lsb_index = self.indices[value.to_bits() as usize & LSB_MASK];
+        let lsb_index = self.indices[(value.to_bits() & LSB_MASK) as usize];
 
         // if value with same lsb is still in scope
         if (self.index - lsb_index) < 128 {
@@ -53,7 +53,7 @@ impl Encoder {
             xor = value.to_bits() ^ self.stored_vals[lsb_index % 128];
             trail = xor.trailing_zeros();
 
-            if trail > THRESHOLD as u32 {
+            if trail > THRESHOLD {
                 // very similar values, so we use prev_index from indices
                 prev_index = lsb_index % 128;
             } else {
@@ -77,7 +77,7 @@ impl Encoder {
             let lead = LEADING_ROUND[xor.leading_zeros() as usize];
 
             // flag: 01
-            if trail > THRESHOLD as u32 {
+            if trail > THRESHOLD {
                 let center_bits = u64::from(64 - lead - trail);
 
                 let tmp = (128 + prev_index as u64) << 9
@@ -114,7 +114,7 @@ impl Encoder {
         self.stored_vals[self.curr_idx] = value.to_bits();
 
         self.index += 1;
-        self.indices[value.to_bits() as usize & LSB_MASK] = self.index;
+        self.indices[(value.to_bits() & LSB_MASK) as usize] = self.index;
     }
 }
 

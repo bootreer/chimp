@@ -32,7 +32,7 @@ impl Encoder {
 
     fn insert_first(&mut self, value: f64) {
         self.stored_vals[self.index] = value.to_bits();
-        self.indices[value.to_bits() as usize & LSB_MASK] = self.index;
+        self.indices[(value.to_bits() & LSB_MASK) as usize] = self.index;
 
         self.w.write_bits(value.to_bits(), 64);
 
@@ -41,7 +41,8 @@ impl Encoder {
 
     // TODO: fix this boy
     fn insert_value(&mut self, value: f64) {
-        let mut lsb_index = self.indices[value.to_bits() as usize & LSB_MASK];
+        let mut lsb_index = self.indices[(value.to_bits() & LSB_MASK) as usize];
+
 
         // is not in ring buffer --> take previous
         if self.index < lsb_index || (self.index - lsb_index) >= 128 {
@@ -72,7 +73,7 @@ impl Encoder {
         self.stored_vals[self.curr_idx] = value.to_bits();
 
         self.index += 1;
-        self.indices[value.to_bits() as usize & LSB_MASK] = self.index;
+        self.indices[(value.to_bits() & LSB_MASK) as usize] = self.index;
 
         // println!("-------------------------------------");
         // println!("value:   : {}", value);
