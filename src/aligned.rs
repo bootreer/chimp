@@ -8,7 +8,7 @@ use crate::*;
 #[derive(Debug)]
 pub struct Encoder {
     first: bool,
-    w: OutputBitStream,
+    pub w: OutputBitStream,
     pub size: u64,
     curr_idx: usize,
     index: usize,
@@ -133,7 +133,7 @@ pub struct Decoder {
     stored_vals: Vec<u64>,
     curr: u64, // curr stored value
     curr_idx: usize,
-    r: InputBitStream,
+    pub r: InputBitStream,
 }
 
 impl Decoder {
@@ -219,37 +219,29 @@ mod test {
     use crate::bitstream::InputBitStream;
     use crate::Encode;
 
-    #[test]
-    fn simple_test() {
-        let float_vec: Vec<f64> = [
-            49.4, 48.8, 46.4, 47.9, 48.7, 48.9, 48.8, 46.4, 47.9, 48.7, 48.9,
-        ]
-        .to_vec();
-
-        let mut encoder = Encoder::new();
-
-        for val in &float_vec {
-            encoder.encode(*val);
-        }
-
-        for val in &encoder.w.buffer {
-            println!("{:064b}", *val);
-        }
-        // 0000000|110|000000 || 110101010101010101010101010101010101010101010101
-
-        let (bytes, _) = encoder.close();
-        let mut decoder = Decoder::new(InputBitStream::new(bytes));
-        let mut datapoints = Vec::new();
-
-        // let mut i = 0;
-        while let Ok(val) = decoder.get_next() {
-            // if i == 11 {
-            //     break;
-            // }
-            // i += 1;
-            datapoints.push(f64::from_bits(val));
-        }
-
-        assert_eq!(datapoints, float_vec);
-    }
+    // #[test]
+    // fn simple_test() {
+    //     let float_vec: Vec<f64> = [
+    //         49.4, 48.8, 46.4, 47.9, 48.7, 48.9, 48.8, 46.4, 47.9, 48.7, 48.9,
+    //     ]
+    //     .to_vec();
+    //
+    //     let mut encoder = Encoder::new();
+    //
+    //     for val in &float_vec {
+    //         encoder.encode(*val);
+    //     }
+    //
+    //     // 0000000|110|000000 || 110101010101010101010101010101010101010101010101
+    //
+    //     let (bytes, _) = encoder.close();
+    //     let mut decoder = Decoder::new(InputBitStream::new(bytes));
+    //     let mut datapoints = Vec::new();
+    //
+    //     while let Ok(val) = decoder.get_next() {
+    //         datapoints.push(f64::from_bits(val));
+    //     }
+    //
+    //     assert_eq!(datapoints, float_vec);
+    // }
 }

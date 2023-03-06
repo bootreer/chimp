@@ -122,9 +122,9 @@ impl OutputBitStream {
 
 #[derive(Debug)]
 pub struct InputBitStream {
-    buffer: Vec<u64>,
-    pos: u8,      // where we are in curr byte
-    index: usize, // where we are in buffer
+    pub buffer: Vec<u64>,
+    pub pos: u8,      // where we are in curr byte
+    pub index: usize, // where we are in buffer
     curr: u64,
 }
 

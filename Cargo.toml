@@ -10,7 +10,7 @@ edition = "2021"
 
 [dependencies]
 csv = "1"
-bytes = "1"
+crossbeam = "0.8"
 
 [dev-dependencies]
 criterion = "0.4"

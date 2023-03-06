@@ -34,24 +34,31 @@ impl Encoder {
 
     fn insert_value(&mut self, value: f64) {
         let xor = self.curr ^ value.to_bits();
+        let trailing = xor & 0x3f;
 
+        self.enc_aux(xor, trailing);
+
+        self.curr = value.to_bits();
+    }
+
+    #[inline(always)]
+    fn enc_aux(&mut self, xor: u64, trailing: u64) {
         if xor == 0 {
             self.w.write_bits(0, 2);
             self.size += 2;
             return;
         }
-
         let lead = LEADING_ROUND[xor.leading_zeros() as usize];
-        let trail = xor.trailing_zeros();
 
-        if trail > 6 {
+        // we and-ed with 0b11_1111
+        if trailing == 0 {
+            let trail = xor.trailing_zeros();
+
             self.w.write_bits(1, 2);
-
             self.w.write_bits(LEADING_REPR_ENC[lead as usize] as u64, 3);
+
             let center_bits = 64 - lead - trail;
-            if center_bits == 51 {
-                println! {"hello: value: {}, curr: {}", value, self.curr};
-            }
+
             self.w.write_bits(center_bits as u64, 6);
             self.w.write_bits(xor >> trail, center_bits);
             self.leading_zeros = 65;
@@ -72,43 +79,73 @@ impl Encoder {
 
             self.size += 66 - lead as u64;
         }
-        self.curr = value.to_bits();
     }
 
     // TODO: impl this
     #[cfg(all(any(target_arch = "x86", target_arch = "x86_64")))]
-    #[target_feature(enable = "avx2")] // TODO: enable AVX512
-    #[allow(unused_variables)]
-    unsafe fn simd_vec(&mut self, values: &Vec<f64>) {
+    #[target_feature(enable = "avx2")]
+    pub unsafe fn simd_vec(&mut self, values: &Vec<f64>) {
         let v = values; // bruh moment
         self.insert_first(values[0]);
 
         let mut i = 0;
 
-        //  we can in max. do xor on 4 values -> 4 new entries at a time
+        // bitwise operations work can be done across a simd vector (xor, leading/trailing zeroes)
         //  windows() doesn't work as there would be too many overlapping xor-ed values -> increment i by 4 every iteration
         while i < values.len() - 4 {
             // mem::transmute maybe
             let (a, b, c, d, e) = (v[i], v[i + 1], v[i + 2], v[i + 3], v[i + 4]);
-            // println!("a: {a}, b: {b}, c: {c}, d: {d}, e: {e}");
 
             // lol switch to mm512
-            let xor = _mm256_castpd_si256(_mm256_xor_pd(
+            let xor_vec = _mm256_castpd_si256(_mm256_xor_pd(
                 _mm256_set_pd(a, b, c, d),
                 _mm256_set_pd(b, c, d, e),
             ));
-            let leading = _mm256_lzcnt_epi64(xor);
+
+            // these slow down performance
+            // let xor_vec = _mm256_xor_epi64(
+            //     _mm256_loadu_epi64(v[i..].as_ptr() as *const i64),
+            //     _mm256_loadu_epi64(v[i+1..].as_ptr() as *const i64),
+            // );
+            // let leading_vec = _mm256_lzcnt_epi64(xor_vec);
 
             // since there is no trailing zero simd intrinsic and we only need to check if bottom
             // 6 bits are set
-            let trail_threshold = _mm256_and_si256(xor, _mm256_set1_epi64x(0x3f));
+            let trail_threshold = _mm256_and_si256(xor_vec, _mm256_set1_epi64x(0x3f));
+
+            let xor: (u64, u64, u64, u64) /* ,u64, u64, u64, u64) */ = std::mem::transmute(xor_vec);
+            // let leading: (u64, u64, u64, u64) /* ,u64, u64, u64, u64) */ = std::mem::transmute(xor_vec);
+            let trailing: (u64, u64, u64, u64) /* ,u64, u64, u64, u64) */ = std::mem::transmute(trail_threshold);
 
             // println!("xor:         {:?}", xor);
+            // println!("xor_vec:     {:?}", xor_vec);
             // println!("leading:     {:?}", leading);
             // println!("trail thres: {:?}", trail_threshold);
 
+            // self.enc_aux(xor.7, leading.7, trailing.7);
+            // self.enc_aux(xor.6, leading.6, trailing.6);
+            // self.enc_aux(xor.5, leading.5, trailing.5);
+            // self.enc_aux(xor.4, leading.4, trailing.4);
+            self.enc_aux(xor.3, trailing.3);
+            self.enc_aux(xor.2, trailing.2);
+            self.enc_aux(xor.1, trailing.1);
+            self.enc_aux(xor.0, trailing.0);
+
             i += 4;
         }
+        self.curr = v[i].to_bits();
+        i += 1;
+
+        // encode rest that don't fit in simd vector
+        while i < values.len() {
+            self.insert_value(values[i]);
+            i += 1;
+        }
+    }
+
+    #[allow(unused)]
+    pub fn threaded(num_theads: u64, values: &Vec<f64>) -> Vec<Box<[u64]>> {
+        vec![Box::new([0u64; 1])]
     }
 
     // NOTE: timestamps?
@@ -269,7 +306,8 @@ mod chimp_tests {
     fn simd_test() {
         let float_vec: Vec<f64> = [
             1.0, 1.0, 16.42, 1.0, 0.00123, 24435_f64, 0_f64, 420.69, 64.2, 49.4, 48.8, 46.4, 64.2,
-            49.4, 48.8, 46.4, 47.9, 48.7, 48.9, 48.8, 46.4, 47.9, 48.7, 48.9,
+            49.4, 48.8, 46.4, 47.9, 48.7, 48.9, 48.8, 46.4, 47.9, 48.7, 48.9, 48.1, 48.12, 1., 2.,
+            0.3,
         ]
         .to_vec();
 
@@ -284,8 +322,9 @@ mod chimp_tests {
 
         while let Ok(val) = decoder.get_next() {
             datapoints.push(f64::from_bits(val));
+            // println!("value: {}", f64::from_bits(val));
         }
 
-        // assert_eq!(datapoints, float_vec);
+        assert_eq!(datapoints, float_vec);
     }
 }
