@@ -10,7 +10,7 @@ edition = "2021"
 
 [dependencies]
 csv = "1"
-crossbeam = "0.8"
+rayon = "1.7"
 
 [dev-dependencies]
 criterion = "0.4"

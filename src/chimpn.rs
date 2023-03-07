@@ -13,8 +13,6 @@ pub struct Encoder {
     curr_idx: usize,
     index: usize, // always points to previous index
     w: OutputBitStream,
-
-    size: u64, // for testing
 }
 
 impl Encoder {
@@ -27,7 +25,6 @@ impl Encoder {
             curr_idx: 0,
             index: 0,
             w: OutputBitStream::new(),
-            size: 0,
         }
     }
 
@@ -36,8 +33,6 @@ impl Encoder {
         self.indices[(value.to_bits() & LSB_MASK) as usize] = self.index;
 
         self.w.write_bits(value.to_bits(), 64);
-
-        self.size += 64;
     }
 
     fn insert_value(&mut self, value: f64) {
@@ -70,9 +65,7 @@ impl Encoder {
         // flag: 00
         if xor == 0 {
             self.w.write_bits(prev_index as u64, 9); // 'flagZeroSize' = log_2(ring_buffer_size) + 2
-            self.leading_zeros = 65;
-
-            self.size += 9;
+            // self.leading_zeros = 65;
         } else {
             let lead = LEADING_ROUND[xor.leading_zeros() as usize];
 
@@ -87,9 +80,7 @@ impl Encoder {
                 self.w.write_bits(tmp, 18); // flagOneSize = log_2(ring_buffer_size) + 11
                 self.w.write_bits(xor >> trail, center_bits as u32);
 
-                self.leading_zeros = 65;
-
-                self.size += 18 + center_bits;
+                self.leading_zeros = lead;
             } else {
                 let center_bits = 64 - lead;
 
@@ -104,7 +95,6 @@ impl Encoder {
 
                 self.w.write_bits(xor, center_bits);
 
-                self.size += 3 + center_bits as u64;
             }
         }
 
@@ -128,7 +118,6 @@ impl Encode for Encoder {
             curr_idx: 0,
             index: 0,
             w: OutputBitStream::with_capacity(values.len() / 2),
-            size: 0,
         };
         for &val in values {
             chimpn.encode(val);
@@ -149,7 +138,9 @@ impl Encode for Encoder {
         let mut this = self;
         this.insert_value(f64::NAN);
         this.w.write_bit(0); // not sure why actual implementation does this
-        (this.w.close(), this.size) // TODO: wtf
+        let buffer = this.w.close();
+        let len = &buffer.len() * 64;
+        (buffer, len as u64)
     }
 }
 

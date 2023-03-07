@@ -1,5 +1,5 @@
 #[allow(unused_imports)]
-use chimp_lib::{aligned, bitstream::InputBitStream, chimp, chimpn, Decode, Encode};
+use chimp_lib::{aligned, bitstream::InputBitStream, chimp, chimpn, gorilla, Decode, Encode};
 
 use std::time::Instant;
 
@@ -8,22 +8,25 @@ pub enum ChimpType {
     Chimp,
     ChimpN,
     SIMD,
+    Gorilla,
+    Rayon,
 }
 
 // simple benchmark/test/comparison with different datasets
 #[allow(unused)]
 fn main() {
-    let paths =
-        vec![
+    let paths = vec![
+        // ("datasets/autocorrelated_values.csv", 0),
+        // ("datasets/random_values.csv", 0),
+
         ("datasets/city_temperature.csv", 2),
-        ("datasets/SSD_HDD_benchmarks.csv", 2),
         ("datasets/Stocks-Germany-sample.txt", 2),
+        ("datasets/SSD_HDD_benchmarks.csv", 2),
 
         // delete first 2-3 lines on the influxdb data
-        ("datasets/influxdb2-sample-data/air-sensor-data/air-sensor-data-annotated.csv", 4),
-        ("datasets/influxdb2-sample-data/bird-migration-data/bird-migration.csv", 6),
-        ("datasets/influxdb2-sample-data/bitcoin-price-data/bitcoin-historical-annotated.csv", 4),
-        // ("datasets/influxdb2-sample-data/noaa-ndbc-data/latest-observations.csv", 15),
+        // ("datasets/influxdb2-sample-data/air-sensor-data/air-sensor-data-annotated.csv", 4),
+        // ("datasets/influxdb2-sample-data/bird-migration-data/bird-migration.csv", 6),
+        // ("datasets/influxdb2-sample-data/bitcoin-price-data/bitcoin-historical-annotated.csv", 4),
     ];
 
     println!("-----------------CHIMP------------------------------");
@@ -37,8 +40,14 @@ fn main() {
         test_compression(&paths, ChimpType::ChimpN);
     }
 
+    println!("-----------------GORILLA----------------------------");
+    test_compression(&paths, ChimpType::Gorilla);
+
     println!("-------------------SIMD-----------------------------");
     test_compression(&paths, ChimpType::SIMD);
+
+    println!("-----------------CHIMP[RAYON]-----------------------");
+    test_compression(&paths, ChimpType::Rayon);
 
     /*
     let mut patas = aligned::Encoder::new();
@@ -79,7 +88,7 @@ fn main() {
 
 pub fn test_compression(paths: &Vec<(&str, usize)>, enc_t: ChimpType) {
     for (path, float_idx) in paths {
-        println!("DATASET: {}", path);
+        println!("[[DATASET: {}]]", path);
         let reader = csv::Reader::from_path(path);
         let mut values: Vec<f64> = Vec::new();
 
@@ -91,6 +100,28 @@ pub fn test_compression(paths: &Vec<(&str, usize)>, enc_t: ChimpType) {
         }
 
         match enc_t {
+            ChimpType::Rayon => {
+                let now = Instant::now();
+                let encoded = chimp::Encoder::threaded(&values);
+                let new_now = Instant::now();
+                println!(
+                    "[encode] per 1000 values: {:?}",
+                    (new_now - now) / (values.len() / 1000) as u32
+                );
+                let size: u64 = encoded.iter().fold(0, |acc, tup| acc + tup.1);
+                println!(
+                    "average bits per val: {}",
+                    size as f64 / values.len() as f64
+                );
+                let now = Instant::now();
+                let decoded = chimp::Decoder::decode_threaded(encoded);
+                let new_now = Instant::now();
+                println!(
+                    "[decode] per 1000 values: {:?}",
+                    (new_now - now) / (decoded.len() / 1000) as u32
+                );
+                assert_eq!(decoded, values);
+            },
             ChimpType::SIMD => {
                 let mut chimp_simd = chimp::Encoder::new();
                 let now = Instant::now();
@@ -131,6 +162,9 @@ pub fn test_compression(paths: &Vec<(&str, usize)>, enc_t: ChimpType) {
             ChimpType::ChimpN => {
                 encode(chimpn::Encoder::new(), &values, ChimpType::ChimpN);
             }
+            ChimpType::Gorilla => {
+                encode(gorilla::Encoder::new(), &values, ChimpType::Gorilla);
+            }
         }
     }
 }
@@ -161,8 +195,10 @@ pub fn encode(mut enc: impl Encode, values: &Vec<f64>, enc_t: ChimpType) {
 
     let bitstream = InputBitStream::new(bytes);
     match enc_t {
-        ChimpType::Chimp | ChimpType::SIMD => decode(chimp::Decoder::new(bitstream), values),
+        ChimpType::Chimp => decode(chimp::Decoder::new(bitstream), values),
         ChimpType::ChimpN => decode(chimpn::Decoder::new(bitstream), values),
+        ChimpType::Gorilla => decode(gorilla::Decoder::new(bitstream), values),
+        _ => {},
     };
 }
 

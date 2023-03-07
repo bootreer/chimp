@@ -8,7 +8,6 @@ pub struct Encoder {
     leading_zeros: u32,
     trailing_zeros: u32,
     write: OutputBitStream,
-    size: u64,
 }
 
 // quick and dirty hack
@@ -20,7 +19,6 @@ impl Encoder {
             leading_zeros: u32::MAX,
             trailing_zeros: 0,
             write: OutputBitStream::new(),
-            size: 0,
         }
     }
 
@@ -28,28 +26,22 @@ impl Encoder {
         if self.first {
             self.first = false;
             self.write.write_bits(value.to_bits(), 64);
-
-            self.size += 64;
         } else {
             let xor = self.curr ^ value.to_bits();
             if xor == 0 {
                 // identical
                 self.write.write_bit(0);
-
-                self.size += 1;
             } else {
                 self.write.write_bit(1);
                 let lead = xor.leading_zeros();
                 let trail = xor.trailing_zeros();
 
-                self.size += 2;
                 if self.leading_zeros <= lead && self.trailing_zeros <= trail {
                     self.write.write_bit(0);
                     let center_bits = 64 - self.leading_zeros - self.trailing_zeros;
 
                     self.write
                         .write_bits(xor >> self.trailing_zeros, center_bits);
-                    self.size += center_bits as u64;
                 } else {
                     self.write.write_bit(1);
                     self.write.write_bits(lead as u64, 6);
@@ -59,8 +51,6 @@ impl Encoder {
 
                     self.leading_zeros = lead;
                     self.trailing_zeros = trail;
-
-                    self.size += 12 + center_bits as u64;
                 }
             }
         }
@@ -85,7 +75,9 @@ impl Encode for Encoder {
     fn close(self) -> (Box<[u64]>, u64) {
         let mut this = self;
         this.insert_value(f64::NAN);
-        (this.write.close(), this.size)
+        let buffer = this.write.close();
+        let len = &buffer.len() * 64;
+        (buffer, len as u64)
     }
 }
 

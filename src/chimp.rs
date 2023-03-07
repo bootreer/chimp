@@ -1,6 +1,6 @@
 use crate::bitstream::*;
 use crate::{Bit, Decode, Encode, LEADING_REPR_DEC, LEADING_REPR_ENC, LEADING_ROUND, NAN};
-use crossbeam;
+use rayon::prelude::*;
 
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
@@ -43,6 +43,7 @@ impl Encoder {
     fn enc_aux(&mut self, xor: u64, trailing: u64) {
         if xor == 0 {
             self.w.write_bits(0, 2);
+            // self.leading_zeros = 65;  this line is in the og impl, but not required
             return;
         }
 
@@ -59,7 +60,8 @@ impl Encoder {
 
             self.w.write_bits(center_bits as u64, 6);
             self.w.write_bits(xor >> trail, center_bits);
-            self.leading_zeros = 65;
+            // self.leading_zeros = 65;
+            self.leading_zeros = lead;
         } else {
             self.w.write_bit(1);
             if lead == self.leading_zeros {
@@ -73,7 +75,8 @@ impl Encoder {
         }
     }
 
-    // TODO: impl this
+    // naive SIMD implementation of chimp
+    // weirdly enough not faster with avx512
     #[cfg(all(any(target_arch = "x86", target_arch = "x86_64")))]
     #[target_feature(enable = "avx2")]
     pub unsafe fn simd_vec(&mut self, values: &Vec<f64>) {
@@ -135,9 +138,17 @@ impl Encoder {
         }
     }
 
-    #[allow(unused)]
-    pub fn threaded(num_theads: u64, values: &Vec<f64>) -> Vec<Box<[u64]>> {
-        vec![Box::new([0u64; 1])]
+    // how to merge the compressed data?
+    pub fn threaded(values: &Vec<f64>) -> Vec<(Box<[u64]>, u64)> {
+        let encoded: Vec<(Box<[u64]>, u64)> = values
+            .par_iter()
+            .fold(Encoder::new, |mut chimp, &elem| {
+                chimp.encode(elem);
+                chimp
+            })
+            .map(|chimp| chimp.close())
+            .collect();
+        encoded
     }
 
     // NOTE: timestamps?
@@ -199,6 +210,17 @@ impl Decoder {
         }
     }
 
+    pub fn from_buffer(buffer: Box<[u64]>) -> Self {
+        Decoder {
+            first: true,
+            done: false,
+            curr: 0,
+            leading_zeros: 0,
+            trailing_zeros: 0,
+            r: InputBitStream::new(buffer),
+        }
+    }
+
     fn get_first(&mut self) -> Result<(), Error> {
         self.curr = self.r.read_bits(64)?;
         Ok(())
@@ -253,6 +275,24 @@ impl Decoder {
         } else {
             Ok(self.curr)
         }
+    }
+
+    // not optimized at all
+    pub fn decode_threaded(values: Vec<(Box<[u64]>, u64)>) -> Vec<f64> {
+        values
+            .par_iter()
+            .map(|pair| &pair.0)
+            .fold(Vec::<f64>::new, |mut vec, buffer| {
+                let mut dec = Decoder::from_buffer(buffer.clone());
+                while let Ok(bits) = dec.get_next() {
+                    vec.push(f64::from_bits(bits));
+                }
+                vec
+            })
+            .reduce(Vec::<f64>::new, |mut acc, mut list| {
+                acc.append(&mut list);
+                acc
+            })
     }
 }
 
