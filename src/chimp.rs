@@ -32,7 +32,7 @@ impl Encoder {
 
     fn insert_value(&mut self, value: f64) {
         let xor = self.curr ^ value.to_bits();
-        let trailing = xor & 0x3f;
+        let trailing = xor & 0xff;
 
         self.enc_aux(xor, trailing);
 
@@ -43,7 +43,7 @@ impl Encoder {
     fn enc_aux(&mut self, xor: u64, trailing: u64) {
         if xor == 0 {
             self.w.write_bits(0, 2);
-            // self.leading_zeros = 65;  this line is in the og impl, but not required
+            // self.leading_zeros = 65;  // this line is in the og impl, but not required
             return;
         }
 
@@ -60,7 +60,6 @@ impl Encoder {
 
             self.w.write_bits(center_bits as u64, 6);
             self.w.write_bits(xor >> trail, center_bits);
-            // self.leading_zeros = 65;
             self.leading_zeros = lead;
         } else {
             self.w.write_bit(1);
@@ -81,7 +80,10 @@ impl Encoder {
     #[target_feature(enable = "avx2")]
     pub unsafe fn simd_vec(&mut self, values: &Vec<f64>) {
         let v = values; // bruh moment
-        self.insert_first(values[0]);
+        if self.first {
+            self.insert_first(values[0]);
+            self.first = false;
+        }
 
         let mut i = 0;
 
@@ -142,7 +144,8 @@ impl Encoder {
     pub fn threaded(values: &Vec<f64>) -> Vec<(Box<[u64]>, u64)> {
         let encoded: Vec<(Box<[u64]>, u64)> = values
             .par_iter()
-            .fold(Encoder::new, |mut chimp, &elem| {
+            // rayon's automatic chunking doens't achieve desirable results at times
+            .fold_chunks(2500, Encoder::new, |mut chimp, &elem| {
                 chimp.encode(elem);
                 chimp
             })
@@ -283,7 +286,7 @@ impl Decoder {
             .par_iter()
             .map(|pair| &pair.0)
             .fold(Vec::<f64>::new, |mut vec, buffer| {
-                let mut dec = Decoder::from_buffer(buffer.clone());
+                let mut dec = Decoder::from_buffer(buffer.clone()); // wat da heo
                 while let Ok(bits) = dec.get_next() {
                     vec.push(f64::from_bits(bits));
                 }
@@ -334,7 +337,6 @@ mod chimp_tests {
         assert_eq!(datapoints, float_vec);
     }
 
-    // TODO:
     #[test]
     fn simd_test() {
         let float_vec: Vec<f64> = [
