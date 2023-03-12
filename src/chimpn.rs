@@ -28,6 +28,18 @@ impl Encoder {
         }
     }
 
+    pub fn with_capacity(capa: usize) -> Self {
+        Encoder {
+            first: true,
+            stored_vals: vec![0; 128],
+            indices: vec![usize::MAX; 2_usize.pow(14)],
+            leading_zeros: 0,
+            curr_idx: 0,
+            index: 0,
+            w: OutputBitStream::with_capacity(capa),
+        }
+    }
+
     fn insert_first(&mut self, value: f64) {
         self.stored_vals[self.index] = value.to_bits();
         self.indices[(value.to_bits() & LSB_MASK) as usize] = self.index;
@@ -43,7 +55,7 @@ impl Encoder {
         let lsb_index = self.indices[(value.to_bits() & LSB_MASK) as usize];
 
         // if value with same lsb is still in scope
-        if (self.index - lsb_index) < 128 {
+        if lsb_index <= self.index && (self.index - lsb_index) < 128 {
             // in lower numbers likely 0?
             xor = value.to_bits() ^ self.stored_vals[lsb_index % 128];
             trail = xor.trailing_zeros();

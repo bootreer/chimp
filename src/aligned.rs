@@ -28,6 +28,17 @@ impl Encoder {
         }
     }
 
+    pub fn with_capacity(capa: usize) -> Self {
+         Encoder {
+            first: true,
+            stored_vals: vec![0; 128],
+            indices: vec![usize::MAX; 2_usize.pow(14)],
+            curr_idx: 0,
+            index: 0,
+            w: OutputBitStream::with_capacity(capa),
+        }
+    }
+
     fn insert_first(&mut self, value: f64) {
         self.stored_vals[self.index] = value.to_bits();
         self.indices[(value.to_bits() & LSB_MASK) as usize] = self.index;
@@ -35,7 +46,7 @@ impl Encoder {
         self.w.write_bits(value.to_bits(), 64);
     }
 
-    // TODO: fix this boy
+    #[inline(always)]
     fn insert_value(&mut self, value: f64) {
         let mut lsb_index = self.indices[(value.to_bits() & LSB_MASK) as usize];
 
@@ -88,6 +99,7 @@ impl Encode for Encoder {
         patas
     }
 
+    #[inline(always)]
     fn encode(&mut self, value: f64) {
         if self.first {
             self.first = false;

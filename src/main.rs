@@ -1,4 +1,3 @@
-#[allow(unused_imports)]
 use chimp_lib::{aligned, bitstream::InputBitStream, chimp, chimpn, gorilla, Decode, Encode};
 
 use std::time::Instant;
@@ -10,6 +9,7 @@ pub enum ChimpType {
     SIMD,
     Gorilla,
     Rayon,
+    Patas
 }
 
 // simple benchmark/test/comparison with different datasets
@@ -49,41 +49,8 @@ fn main() {
     println!("-----------------CHIMP[RAYON]-----------------------");
     test_compression(&paths, ChimpType::Rayon);
 
-    /*
-    let mut patas = aligned::Encoder::new();
-    let now = Instant::now();
-    for &val in &values {
-        patas.insert(val);
-    }
-    let new_now = Instant::now();
-    let (buffer, size) = patas.close();
-    println!(
-        "per 1000 values: {:?}",
-        (new_now - now) / (values.len() / 1000) as u32
-    );
-                println!("-------------------SIMD-----------------------------");
-    println!("{} bits per Value", size as f64 / values.len() as f64);
-
-    let mut dec = aligned::Decoder::new(InputBitStream::new(buffer));
-    let mut vec: Vec<f64> = Vec::new();
-    let now = Instant::now();
-
-    while let Ok(dec_val) = dec.get_next() {
-        vec.push(f64::from_bits(dec_val));
-    }
-
-    let new_now = Instant::now();
-    println!(
-        "time required to decode {} values: {:?}",
-        vec.len(),
-        new_now - now
-    );
-    println!(
-        "per 1000 values: {:?}",
-        (new_now - now) / (vec.len() / 1000) as u32
-    );
-    assert_eq!(&vec, &values);
-    */
+    println!("-----------------PATAS------------------------------");
+    test_compression(&paths, ChimpType::Patas);
 }
 
 pub fn test_compression(paths: &Vec<(&str, usize)>, enc_t: ChimpType) {
@@ -145,11 +112,6 @@ pub fn test_compression(paths: &Vec<(&str, usize)>, enc_t: ChimpType) {
                     vec.push(f64::from_bits(dec_val));
                 }
                 let new_now = Instant::now();
-                // println!(
-                //     "time required to decode {} values: {:?}",
-                //     vec.len(),
-                //     new_now - now
-                // );
                 println!(
                     "[decode] per 1000 values: {:?}",
                     (new_now - now) / (vec.len() / 1000) as u32
@@ -157,14 +119,18 @@ pub fn test_compression(paths: &Vec<(&str, usize)>, enc_t: ChimpType) {
                 assert_eq!(&vec, &values);
             }
             ChimpType::Chimp => {
-                encode(chimp::Encoder::new(), &values, ChimpType::Chimp);
+                encode(chimp::Encoder::with_capacity(values.len()), &values, ChimpType::Chimp);
             }
             ChimpType::ChimpN => {
-                encode(chimpn::Encoder::new(), &values, ChimpType::ChimpN);
+                encode(chimpn::Encoder::with_capacity(values.len()), &values, ChimpType::ChimpN);
             }
             ChimpType::Gorilla => {
                 encode(gorilla::Encoder::new(), &values, ChimpType::Gorilla);
+            },
+            ChimpType::Patas => {
+                encode(aligned::Encoder::with_capacity(values.len()), &values, ChimpType::Patas);
             }
+
         }
     }
 }
@@ -182,12 +148,6 @@ pub fn encode(mut enc: impl Encode, values: &Vec<f64>, enc_t: ChimpType) {
         "average bits per val: {}",
         size as f64 / values.len() as f64
     );
-
-    // println!(
-    //     "time required to encode {} values: {:?}",
-    //     values.len(),
-    //     new_now - now
-    // );
     println!(
         "[encode] per 1000 values: {:?}",
         (new_now - now) / (values.len() / 1000) as u32
@@ -198,6 +158,7 @@ pub fn encode(mut enc: impl Encode, values: &Vec<f64>, enc_t: ChimpType) {
         ChimpType::Chimp => decode(chimp::Decoder::new(bitstream), values),
         ChimpType::ChimpN => decode(chimpn::Decoder::new(bitstream), values),
         ChimpType::Gorilla => decode(gorilla::Decoder::new(bitstream), values),
+        ChimpType::Patas => decode(aligned::Decoder::new(bitstream), values),
         _ => {},
     };
 }
@@ -211,11 +172,6 @@ pub fn decode(mut dec: impl Decode, values: &Vec<f64>) {
     }
 
     let new_now = Instant::now();
-    // println!(
-    //     "time required to decode {} values: {:?}",
-    //     vec.len(),
-    //     new_now - now
-    // );
     println!(
         "[decode] per 1000 values: {:?}",
         (new_now - now) / (vec.len() / 1000) as u32

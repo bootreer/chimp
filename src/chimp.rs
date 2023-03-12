@@ -6,6 +6,7 @@ use rayon::prelude::*;
 use std::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
+use std::usize;
 
 #[derive(Debug)]
 pub struct Encoder {
@@ -22,6 +23,15 @@ impl Encoder {
             curr: 0,
             leading_zeros: u32::MAX,
             w: OutputBitStream::new(),
+        }
+    }
+
+    pub fn with_capacity(capa: usize) -> Self {
+        Encoder {
+            first: true,
+            curr: 0,
+            leading_zeros: u32::MAX,
+            w: OutputBitStream::with_capacity(capa),
         }
     }
 
