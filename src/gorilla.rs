@@ -72,7 +72,7 @@ impl Encode for Encoder {
         self.insert_value(value);
     }
 
-    fn close(self) -> (Box<[u64]>, u64) {
+    fn close(self) -> (Box<[u8]>, u64) {
         let mut this = self;
         this.insert_value(f64::NAN);
         let buffer = this.write.close();

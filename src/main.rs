@@ -46,8 +46,8 @@ fn main() {
     println!("-------------------SIMD-----------------------------");
     test_compression(&paths, ChimpType::SIMD);
 
-    println!("-----------------CHIMP[RAYON]-----------------------");
-    test_compression(&paths, ChimpType::Rayon);
+    // println!("-----------------CHIMP[RAYON]-----------------------");
+    // test_compression(&paths, ChimpType::Rayon);
 
     println!("-----------------PATAS------------------------------");
     test_compression(&paths, ChimpType::Patas);

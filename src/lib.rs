@@ -46,7 +46,7 @@ pub trait Encode {
     fn encode(&mut self, value: f64);
 
     /// returns Boxed Buffer and number of bits written
-    fn close(self) -> (Box<[u64]>, u64);
+    fn close(self) -> (Box<[u8]>, u64);
 }
 
 pub trait Decode {

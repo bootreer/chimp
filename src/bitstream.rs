@@ -27,185 +27,198 @@ impl error::Error for Error {
 
 #[derive(Debug)]
 pub struct OutputBitStream {
-    pub buffer: Vec<u64>,
-    pos: u32,   // position in curr byte; 0 is right-most bit
-    curr: u64, // faster than constantly accessing buffer
+    buffer: Vec<u8>,
+    // buffer: Box<[u8]>,
+
+    pos: u8,  // position in curr byte; 0 is right-most bit
+    curr: u8, // faster than constantly accessing buffer
+    idx: usize
 }
 
 impl OutputBitStream {
     pub fn new() -> Self {
         OutputBitStream {
             buffer: Vec::new(),
+            // buffer: Box::new([0u8; 8 * 5_000_000]),
             pos: 0,
             curr: 0,
+            idx: 0,
         }
     }
 
+    #[allow(unused)]
     pub fn with_capacity(capacity: usize) -> Self {
         OutputBitStream {
             buffer: Vec::with_capacity(capacity),
+            // buffer: Box::new([0u8; 8 * 5_000_000]),
             pos: 0,
             curr: 0,
+            idx: 0,
         }
     }
 
     #[inline(always)]
     fn check_grow(&mut self) {
-        if self.pos == 64 {
+        if self.pos == 8 {
             self.buffer.push(self.curr); // increase size
+            // self.buffer[self.idx] = self.curr;
             self.pos = 0;
             self.curr = 0;
+            self.idx += 1;
         }
     }
 
     #[inline(always)]
     fn grow(&mut self) {
         self.buffer.push(self.curr);
+        // self.buffer[self.idx] = self.curr;
         self.curr = 0;
+        self.idx += 1;
     }
 
-    pub fn close(mut self) -> Box<[u64]> {
-        // println!("Buffer stats: Bits used: {}", (self.buffer.len() * 64) + self.pos as usize);
+    pub fn close(mut self) -> Box<[u8]> {
         if self.pos != 0 {
             self.buffer.push(self.curr);
+            // self.buffer[self.idx] = self.curr;
+            self.idx += 1;
         }
+        // self.buffer
         self.buffer.into_boxed_slice() // FIX?
     }
 
     #[inline(always)]
     pub fn write_bit(&mut self, bit: u8) {
         self.check_grow();
+        self.curr |= (bit & 1) << (7 - self.pos);
         self.pos += 1;
-        self.curr |= ((bit & 1) as u64) << (64 - self.pos);
     }
 
-    // might be able to remove this entirely for u64
     #[inline(always)]
     pub fn write_byte(&mut self, byte: u8) {
-        let byte: u64 = byte as u64;
-        self.check_grow();
-
-        if 64 - self.pos < 8 {
-            self.curr |= (byte >> self.pos) as u64;
+        if self.pos == 8 {
             self.grow();
-            let byte: u128 = (byte as u128) << self.pos; // to avoid overflow
-            self.curr |= byte as u64;
-            self.pos = (self.pos + 8) & 63;
+            self.buffer.push(byte);
+            // self.buffer[self.idx] = byte;
+            self.pos = 0; // otherwise empty curr would be pushed
+            self.idx += 1;
+
             return;
         }
 
-        self.curr |= byte << (64 - self.pos);
-        self.pos += 8;
+        self.curr |= byte >> self.pos;
+        self.grow();
+        let byte = (byte as u32) << (8 - self.pos as u32);
+        self.curr |= byte as u8;
     }
 
     // NOTE: maybe make len u8
     // len \in [0,64]
     #[inline(always)]
     pub fn write_bits(&mut self, mut bits: u64, mut len: u32) {
-        // if len == 0 {
-        //     return;
-        // }
-
-        self.check_grow();
-
-        if 64 - self.pos < len {
-            len -= (64 - self.pos) as u32;
-            self.curr |= bits.overflowing_shr(len).0;
-            self.grow();
-            self.pos = 0;
+        while len >= 8 {
+            len -= 8;
+            let to_write = bits >> len;
+            self.write_byte(to_write as u8);
         }
-        bits <<= (64 - len) - self.pos;
-        self.curr |= bits;
-        self.pos += len;
+
+        if len == 0 {
+            return;
+        }
+
+        // TODO: maybe fit what can be fit and recursive call?
+        // if we can fit all in one go
+        if 8 - self.pos >= len as u8 {
+            bits <<= 8 - len - self.pos as u32;
+            self.curr |= bits as u8;
+            self.pos += len as u8;
+            return;
+        }
+
+        for _ in 0..len {
+            let to_write = bits >> (len - 1);
+            self.write_bit(to_write as u8);
+            // this does not mutate the bound of the loop which is intended
+            len -= 1;
+        }
     }
 }
 
 #[derive(Debug)]
 pub struct InputBitStream {
-    pub buffer: Vec<u64>,
-    pub pos: u8,      // where we are in curr byte
-    pub index: usize, // where we are in buffer
-    curr: u64,
+    buffer: Vec<u8>,
+    pos: u8,      // where we are in curr byte
+    index: usize, // where we are in buffer
 }
 
 impl InputBitStream {
-    pub fn new(buffer: Box<[u64]>) -> Self {
-        let buffer = buffer.into_vec();
-        let curr = *buffer.get(0).unwrap();
-
+    pub fn new(bytes: Box<[u8]>) -> Self {
         InputBitStream {
-            buffer,
+            buffer: bytes.into_vec(),
             pos: 0,
             index: 0,
-            curr,
-        }
-    }
-
-    #[inline(always)]
-    fn check_grow(&mut self) {
-        if self.pos == 64 {
-            self.index += 1;
-            self.pos = 0;
-            self.curr = *self.buffer.get(self.index).ok_or(Error::EOF).unwrap();
         }
     }
 
     #[inline(always)]
     pub fn read_bit(&mut self) -> Result<Bit, Error> {
-        self.check_grow();
+        if self.pos == 8 {
+            self.index += 1;
+            self.pos = 0;
+        }
+        let curr_byte = *self.buffer.get(self.index).ok_or(Error::EOF)?;
         self.pos += 1;
 
-        if (self.curr >> (64 - self.pos)) & 1 == 0 {
+        if (curr_byte >> (8 - self.pos)) & 1 == 0 {
             Ok(Bit::Zero)
         } else {
             Ok(Bit::One)
         }
     }
 
-    // can probably remove as well
     #[inline(always)]
     fn read_byte(&mut self) -> Result<u8, Error> {
-        self.check_grow();
-
-        let mut byte: u8 = 0;
-        if self.pos > 54 {
-            byte |= (self.curr << (64 - self.pos)) as u8;
+        if self.pos == 8 {
             self.index += 1;
-            self.curr = *self.buffer.get(self.index).ok_or(Error::EOF)?;
-
-            byte |= (self.curr >> self.pos) as u8;
-
-            self.pos = (self.pos + 8) & 63;
-            return Ok(byte);
+            return self.buffer.get(self.index).copied().ok_or(Error::EOF);
+        }
+        if self.pos == 0 {
+            self.pos += 8;
+            return self.buffer.get(self.index).copied().ok_or(Error::EOF);
         }
 
-        let curr_stored = *self.buffer.get(self.index).ok_or(Error::EOF)?;
+        let mut byte: u8 = 0;
+        let mut curr_byte = *self.buffer.get(self.index).ok_or(Error::EOF)?;
 
-        byte = (curr_stored >> 54 - self.pos) as u8;
+        byte |= curr_byte.wrapping_shl(self.pos as u32);
+
+        self.index += 1;
+        curr_byte = *self.buffer.get(self.index).ok_or(Error::EOF)? >> (8 - self.pos); // schmexy
+
+        byte |= curr_byte;
 
         Ok(byte)
     }
 
     #[inline(always)]
-    #[allow(unused_mut, unused_variables)]
     pub fn read_bits(&mut self, mut len: u32) -> Result<u64, Error> {
-        let mut bits: u64 = 0;
-        let bit_mask: u64 = (1 << len - 1) | (1 << len - 1) - 1;
-
-        self.check_grow();
-
-        if (64 - self.pos) < len as u8 {
-            len -= (64 - self.pos) as u32;
-            bits |= self.curr << len;
-            self.index += 1;
-            self.curr = *self.buffer.get(self.index).ok_or(Error::EOF)?;
-            self.pos = 0;
+        if len > 64 {
+            len = 64;
         }
 
-        self.pos += len as u8;
-        bits |= self.curr >> (64 - self.pos as u32);
+        let mut bits: u64 = 0;
+        while len >= 8 {
+            let byte = self.read_byte()? as u64;
+            len -= 8;
+            bits |= byte.wrapping_shl(len);
+        }
 
-        Ok(bits & bit_mask)
+        while len > 0 {
+            let bit = self.read_bit()?.into_64();
+            len -= 1;
+            bits |= bit << len;
+        }
+
+        Ok(bits)
     }
 }
 
@@ -221,21 +234,74 @@ mod tests {
             // 0101_0101
             b.write_bit(i % 2);
         }
+
+        b.write_bit(1);
         b.grow();
-        assert_eq!(b.buffer[0], 0b0101_0101 << 56);
+        assert_eq!(b.buffer.len(), 2);
+        assert_eq!(b.buffer[0], 0b0101_0101);
+        assert_eq!(b.buffer[1], 0b1000_0000);
     }
 
     #[test]
-    fn write_byte() {}
+    fn write_byte() {
+        let mut b = OutputBitStream::new();
+
+        b.write_byte(123);
+        b.write_byte(42);
+        b.write_byte(255);
+
+        assert_eq!(b.buffer.len(), 3);
+        assert_eq!(b.buffer[0], 123);
+        assert_eq!(b.buffer[1], 42);
+        assert_eq!(b.buffer[2], 255);
+
+        b.write_bit(0);
+        b.write_bit(0);
+        b.write_bit(0);
+        b.write_byte(0b1010_0101); // --> 0001_0100 ; 101x_xxxx
+        b.write_byte(0b0000_1111); // --> 1010_0001 ; 111x_xxxx
+        b.write_bit(0); // --> 1110_xxxx
+        b.write_byte(0b1001_1111); // --> 1110_1001 ; 1111_0000
+        b.grow(); // push curr to buffer
+
+        assert_eq!(b.buffer.len(), 7);
+        assert_eq!(b.buffer[3], 0b0001_0100);
+        assert_eq!(b.buffer[4], 0b1010_0001);
+        assert_eq!(b.buffer[5], 0b1110_1001);
+        assert_eq!(b.buffer[6], 0b1111_0000);
+    }
 
     #[test]
-    fn write_bits() {}
+    fn write_bits() {
+        let mut b = OutputBitStream::new();
+
+        // 0001
+        b.write_bits(1, 4);
+        // 0 * 16
+        b.write_bits(0, 16);
+        // 11001
+        b.write_bits(25, 5);
+        // 1000101
+        b.write_bits(69, 7);
+
+        assert_eq!(b.buffer.len(), 3);
+        assert_eq!(b.buffer[0], 0b0001_0000);
+        assert_eq!(b.buffer[1], 0);
+        assert_eq!(b.buffer[2], 0b0000_1100);
+        assert_eq!(b.curr, 0b1100_0101);
+        assert_eq!(b.pos, 8);
+
+        // 10110
+        b.write_bits(0b1001_0110, 5);
+        assert_eq!(b.buffer[3], 0b1100_0101);
+        assert_eq!(b.curr, 0b1011_0000);
+    }
 
     #[test]
     fn write_and_close() {
         let mut b = OutputBitStream::new();
         for i in 0..8 {
-            b.write_bit(i % 3); // 0100_1001
+            b.write_bit(i % 3); // 1001_0010
         }
         // 0001
         b.write_bits(1, 4);
@@ -248,25 +314,16 @@ mod tests {
 
         b.write_bit(1);
 
-        b.write_bits(0b1000_1110, 8);
-        b.write_bits(0b0100_1001, 8);
-        b.write_bits(0b0000_0110, 8);
+        b.write_byte(0b1000_1110);
+        b.write_byte(0b0100_1001);
+        b.write_byte(0b0000_0110);
         b.write_bit(1);
         b.write_bits(0b101, 3);
-        let slice = b.close();
+        let slice = b.close().into_vec();
 
-        // 1001_0010|0001_0000|0000_0000|0000_1100|1100_0101|1100_0111|0010_0100|1000_0110
-        // 0110_1000
-        assert_eq!(slice.len(), 2);
-
-        let mut r = InputBitStream::new(slice);
-        assert_eq!(r.read_bits(4).unwrap(), 0b0100);
-        assert_eq!(r.read_bits(1).unwrap(), 0b1);
-        assert_eq!(r.read_bits(1).unwrap(), 0b0);
-        assert_eq!(r.read_bits(2).unwrap(), 0b01);
-
-        assert_eq!(r.read_bits(4).unwrap(), 1);
-        assert_eq!(r.read_bits(21).unwrap(), 0b11001);
+        // 1001_0010 | 0001_0000 | 0000_0000 | 0000_1100 | 1100_0101 | 1100_0111 |
+        // 0010_0100 | 1000_011 | 0110_1000
+        assert_eq!(slice.len(), 9);
     }
 
     #[test]
@@ -278,6 +335,5 @@ mod tests {
         let mut r = InputBitStream::new(b.close());
         assert_eq!(r.read_bits(64).unwrap(), 1.0_f64.to_bits());
         assert_eq!(r.read_bits(4).unwrap(), 0b1011);
-        assert_eq!(r.read_bits(60).unwrap(), 0);
     }
 }

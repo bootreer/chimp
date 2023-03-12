@@ -151,8 +151,8 @@ impl Encoder {
     }
 
     // how to merge the compressed data?
-    pub fn threaded(values: &Vec<f64>) -> Vec<(Box<[u64]>, u64)> {
-        let encoded: Vec<(Box<[u64]>, u64)> = values
+    pub fn threaded(values: &Vec<f64>) -> Vec<(Box<[u8]>, u64)> {
+        let encoded: Vec<(Box<[u8]>, u64)> = values
             .par_iter()
             // rayon's automatic chunking doens't achieve desirable results at times
             .fold_chunks(2500, Encoder::new, |mut chimp, &elem| {
@@ -191,7 +191,7 @@ impl Encode for Encoder {
         }
     }
 
-    fn close(self) -> (Box<[u64]>, u64) {
+    fn close(self) -> (Box<[u8]>, u64) {
         let mut this = self;
         this.insert_value(f64::NAN);
         this.w.write_bit(0); // not sure why actual implementation does this
@@ -223,7 +223,7 @@ impl Decoder {
         }
     }
 
-    pub fn from_buffer(buffer: Box<[u64]>) -> Self {
+    pub fn from_buffer(buffer: Box<[u8]>) -> Self {
         Decoder {
             first: true,
             done: false,
@@ -291,7 +291,7 @@ impl Decoder {
     }
 
     // not optimized at all
-    pub fn decode_threaded(values: Vec<(Box<[u64]>, u64)>) -> Vec<f64> {
+    pub fn decode_threaded(values: Vec<(Box<[u8]>, u64)>) -> Vec<f64> {
         values
             .par_iter()
             .map(|pair| &pair.0)

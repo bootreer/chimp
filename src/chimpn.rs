@@ -146,7 +146,7 @@ impl Encode for Encoder {
         }
     }
 
-    fn close(self) -> (Box<[u64]>, u64) {
+    fn close(self) -> (Box<[u8]>, u64) {
         let mut this = self;
         this.insert_value(f64::NAN);
         this.w.write_bit(0); // not sure why actual implementation does this
