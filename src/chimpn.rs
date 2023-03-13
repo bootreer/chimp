@@ -47,29 +47,29 @@ impl Encoder {
         self.w.write_bits(value.to_bits(), 64);
     }
 
+    #[inline(always)]
     fn insert_value(&mut self, value: f64) {
         let prev_index: usize;
         let mut trail: u32 = 0;
         let mut xor: u64;
 
-        let lsb_index = self.indices[(value.to_bits() & LSB_MASK) as usize];
+        let lsb_index: usize = self.indices[(value.to_bits() & LSB_MASK) as usize];
 
         // if value with same lsb is still in scope
         if lsb_index <= self.index && (self.index - lsb_index) < 128 {
-            // in lower numbers likely 0?
-            xor = value.to_bits() ^ self.stored_vals[lsb_index % 128];
+            xor = value.to_bits() ^ self.stored_vals[lsb_index & 127];
             trail = xor.trailing_zeros();
 
+            // technically shouldn't need to check this?
             if trail > THRESHOLD {
-                // very similar values, so we use prev_index from indices
-                prev_index = lsb_index % 128;
+                prev_index = lsb_index & 127;
             } else {
                 // previous value
-                prev_index = self.index % 128;
+                prev_index = self.index & 127;
                 xor = self.stored_vals[self.curr_idx] ^ value.to_bits();
             }
         } else {
-            prev_index = self.index % 128;
+            prev_index = self.index & 127;
             xor = self.stored_vals[self.curr_idx] ^ value.to_bits();
         }
 
@@ -85,7 +85,7 @@ impl Encoder {
             if trail > THRESHOLD {
                 let center_bits = u64::from(64 - lead - trail);
 
-                let tmp = (128 + prev_index as u64) << 9
+                let tmp = (128 | prev_index as u64) << 9
                     | (LEADING_REPR_ENC[lead as usize] as u64) << 6
                     | center_bits;
 
@@ -111,7 +111,7 @@ impl Encoder {
         }
 
         self.curr_idx += 1;
-        self.curr_idx %= 128;
+        self.curr_idx &= 127;
 
         self.stored_vals[self.curr_idx] = value.to_bits();
 
