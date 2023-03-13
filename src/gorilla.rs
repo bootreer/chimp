@@ -33,8 +33,12 @@ impl Encoder {
                 self.write.write_bit(0);
             } else {
                 self.write.write_bit(1);
-                let lead = xor.leading_zeros();
+                let mut lead = xor.leading_zeros();
                 let trail = xor.trailing_zeros();
+
+                if lead >= 32 {
+                    lead = 31;
+                }
 
                 if self.leading_zeros <= lead && self.trailing_zeros <= trail {
                     self.write.write_bit(0);
@@ -44,7 +48,7 @@ impl Encoder {
                         .write_bits(xor >> self.trailing_zeros, center_bits);
                 } else {
                     self.write.write_bit(1);
-                    self.write.write_bits(lead as u64, 6);
+                    self.write.write_bits(lead as u64, 5);
                     let center_bits = 64 - lead - trail;
                     self.write.write_bits((center_bits as u64) - 1, 6);
                     self.write.write_bits(xor >> trail, center_bits);
@@ -113,7 +117,7 @@ impl Decoder {
         if bit == Bit::One {
             bit = self.read.read_bit()?;
             if bit == Bit::One {
-                self.leading_zeros = self.read.read_bits(6)? as u32;
+                self.leading_zeros = self.read.read_bits(5)? as u32;
                 let center_bits = self.read.read_bits(6)? as u32 + 1;
                 self.trailing_zeros = 64 - self.leading_zeros - center_bits;
             }
