@@ -1,6 +1,5 @@
 #![warn(rust_2018_idioms, rust_2021_compatibility, nonstandard_style)]
 #![allow(unused_imports, dead_code)]
-#![feature(stdsimd)]
 
 use crate::bitstream::{Error, InputBitStream, OutputBitStream};
 pub mod aligned;
@@ -51,4 +50,18 @@ pub trait Encode {
 
 pub trait Decode {
     fn get_next(&mut self) -> Result<u64, Error>;
+}
+
+#[cfg(test)]
+mod fastalp_tests {
+    #[test]
+    fn test_fastalp_roundtrip() {
+        let values: Vec<f64> = vec![
+            1.0, 1.0, 16.42, 1.0, 0.00123, 24435_f64, 0_f64, 420.69, 64.2, 49.4, 48.8, 46.4, 47.9,
+            48.7, 48.9, 48.1, 48.12, 1.0, 2.0, 0.3,
+        ];
+        let compressed = fastalp::compress(&values);
+        let decompressed = fastalp::decompress::<f64>(&compressed).expect("decompress failed");
+        assert_eq!(decompressed, values);
+    }
 }

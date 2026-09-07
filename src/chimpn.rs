@@ -77,7 +77,7 @@ impl Encoder {
         // flag: 00
         if xor == 0 {
             self.w.write_bits(prev_index as u64, 9); // 'flagZeroSize' = log_2(ring_buffer_size) + 2
-            // self.leading_zeros = 65;
+                                                     // self.leading_zeros = 65;
         } else {
             let lead = LEADING_ROUND[xor.leading_zeros() as usize];
 
@@ -106,7 +106,6 @@ impl Encoder {
                 }
 
                 self.w.write_bits(xor, center_bits);
-
             }
         }
 

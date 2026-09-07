@@ -28,7 +28,7 @@ impl error::Error for Error {
 #[derive(Debug)]
 pub struct OutputBitStream {
     pub buffer: Vec<u64>,
-    pos: u32,   // position in curr byte; 0 is right-most bit
+    pos: u32,  // position in curr byte; 0 is right-most bit
     curr: u64, // faster than constantly accessing buffer
 }
 

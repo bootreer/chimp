@@ -29,7 +29,7 @@ impl Encoder {
     }
 
     pub fn with_capacity(capa: usize) -> Self {
-         Encoder {
+        Encoder {
             first: true,
             stored_vals: vec![0; 128],
             indices: vec![usize::MAX; 2_usize.pow(14)],
@@ -79,7 +79,6 @@ impl Encoder {
 
         self.index += 1;
         self.indices[(value.to_bits() & LSB_MASK) as usize] = self.index;
-
     }
 }
 

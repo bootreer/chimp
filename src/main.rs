@@ -5,10 +5,12 @@ use std::time::{Duration, Instant};
 pub enum ChimpType {
     Chimp,
     ChimpN,
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     SIMD,
     Gorilla,
     Rayon,
     Patas,
+    Fastalp,
 }
 
 // simple benchmark/test/comparison with different datasets
@@ -17,11 +19,9 @@ fn main() {
     let paths = vec![
         // ("datasets/autocorrelated_values.csv", 0),
         // ("datasets/random_values.csv", 0),
-
         ("datasets/city_temperature.csv", 2),
         ("datasets/Stocks-Germany-sample.txt", 2),
         ("datasets/SSD_HDD_benchmarks.csv", 2),
-
         // ("datasets/influxdb2-sample-data/air-sensor-data/air-sensor-data-annotated.csv", 4),
         // ("datasets/influxdb2-sample-data/bird-migration-data/bird-migration.csv", 6),
         // ("datasets/influxdb2-sample-data/bitcoin-price-data/bitcoin-historical-annotated.csv", 4),
@@ -41,14 +41,20 @@ fn main() {
     println!("-----------------GORILLA----------------------------");
     test_compression(&paths, ChimpType::Gorilla);
 
-    println!("-------------------SIMD-----------------------------");
-    test_compression(&paths, ChimpType::SIMD);
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        println!("-------------------SIMD-----------------------------");
+        test_compression(&paths, ChimpType::SIMD);
+    }
 
     println!("-----------------CHIMP[RAYON]-----------------------");
     test_compression(&paths, ChimpType::Rayon);
 
     println!("-----------------PATAS------------------------------");
     test_compression(&paths, ChimpType::Patas);
+
+    println!("-----------------FASTALP----------------------------");
+    test_compression(&paths, ChimpType::Fastalp);
 }
 
 pub fn test_compression(paths: &Vec<(&str, usize)>, enc_t: ChimpType) {
@@ -56,7 +62,7 @@ pub fn test_compression(paths: &Vec<(&str, usize)>, enc_t: ChimpType) {
     let mut dec_vec = Vec::new();
     let mut ratio_vec = Vec::new();
 
-    // does n runs over each dataset, used for getting an avg dec/enc speed 
+    // does n runs over each dataset, used for getting an avg dec/enc speed
     let n = 25;
     for _ in 0..n {
         for (path, float_idx) in paths {
@@ -101,6 +107,7 @@ pub fn test_compression(paths: &Vec<(&str, usize)>, enc_t: ChimpType) {
                     // );
                     assert_eq!(decoded, values);
                 }
+                #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
                 ChimpType::SIMD => {
                     let mut chimp_simd = chimp::Encoder::new();
                     let now = Instant::now();
@@ -159,6 +166,21 @@ pub fn test_compression(paths: &Vec<(&str, usize)>, enc_t: ChimpType) {
                         &values,
                         ChimpType::Patas,
                     );
+                }
+                ChimpType::Fastalp => {
+                    let now = Instant::now();
+                    let encoded = fastalp::compress(&values);
+                    let new_now = Instant::now();
+                    let size = (encoded.len() * 8) as u64;
+                    enc_speed = (new_now - now) / (values.len() / 1000) as u32;
+                    compr_ratio = size as f64 / values.len() as f64;
+
+                    let now = Instant::now();
+                    let decoded =
+                        fastalp::decompress::<f64>(&encoded).expect("fastalp decompress failed");
+                    let new_now = Instant::now();
+                    dec_speed = (new_now - now) / (decoded.len() / 1000) as u32;
+                    assert_eq!(decoded.as_slice(), values.as_slice());
                 }
             }
             enc_vec.push(enc_speed);

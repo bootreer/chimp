@@ -6,7 +6,6 @@ use rayon::prelude::*;
 use std::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
-use std::usize;
 
 #[derive(Debug)]
 pub struct Encoder {
@@ -348,6 +347,7 @@ mod chimp_tests {
     }
 
     #[test]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     fn simd_test() {
         let float_vec: Vec<f64> = [
             1.0, 1.0, 16.42, 1.0, 0.00123, 24435_f64, 0_f64, 420.69, 64.2, 49.4, 48.8, 46.4, 64.2,
